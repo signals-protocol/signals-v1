@@ -1,0 +1,11 @@
+[profile.default]
+src = "contracts"
+out = "out"
+libs = ["lib"]
+test = "test"
+cache_path = "cache/foundry"
+
+bytecode_hash = "none"
+offline = false
+optimizer = true
+optimizer_runs = 200
