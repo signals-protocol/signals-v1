@@ -1,0 +1,36 @@
+{
+  "name": "signals-v1",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Signals v1 architecture/build scaffolding (Phase 0: infra only)",
+  "license": "MIT",
+  "scripts": {
+    "test": "hardhat test",
+    "clean": "hardhat clean",
+    "lint": "echo \"TODO: add lint configuration\"",
+    "format": "echo \"TODO: add formatter configuration\""
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.3",
+    "@nomicfoundation/hardhat-ignition": "^0.15.0",
+    "@nomicfoundation/hardhat-ignition-ethers": "^0.15.4",
+    "@nomicfoundation/ignition-core": "^0.15.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.11",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.4",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.19",
+    "chai": "^4.4.1",
+    "ethers": "^6.11.1",
+    "hardhat": "^2.22.3",
+    "hardhat-gas-reporter": "^1.0.10",
+    "solidity-coverage": "^0.8.10",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.1",
+    "typescript": "^5.4.0"
+  }
+}
