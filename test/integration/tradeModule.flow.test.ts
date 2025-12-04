@@ -88,6 +88,14 @@ describe("TradeModule flow (minimal parity)", () => {
     expect(endBal).to.be.lessThan(startBal); // paid trading cost overall
   });
 
+  it("rejects zero quantity and misaligned ticks", async () => {
+    const { user, core } = await deploySystem();
+    await expect(core.connect(user).openPosition(1, 0, 4, 0, 1_000_000)).to.be.reverted;
+
+    const { user: u2, core: c2 } = await deploySystem({ tickSpacing: 2 });
+    await expect(c2.connect(u2).openPosition(1, 1, 3, 1_000, 5_000_000)).to.be.reverted;
+  });
+
   it("reverts on inactive market and invalid ticks", async () => {
     const { user, core } = await deploySystem({ isActive: false });
     await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to.be.reverted;
@@ -103,6 +111,40 @@ describe("TradeModule flow (minimal parity)", () => {
     await core.connect(user).openPosition(1, 0, 4, 1_000, quote);
     const balAfter = await payment.balanceOf(user.address);
     expect(balBefore - balAfter).to.equal(quote);
+  });
+
+  it("allows claim after settlement and burns position", async () => {
+    const { user, core, payment, position } = await deploySystem();
+    const quote = await core.calculateOpenCost.staticCall(1, 0, 4, 1_000);
+    await core.connect(user).openPosition(1, 0, 4, 1_000, quote);
+
+    // mark market settled in the past to satisfy claim gate
+    const m = await core.markets(1);
+    const past = m.endTimestamp - 1000n;
+    await core.setMarket(1, {
+      isActive: m.isActive,
+      settled: true,
+      snapshotChunksDone: m.snapshotChunksDone,
+      numBins: m.numBins,
+      openPositionCount: m.openPositionCount,
+      snapshotChunkCursor: m.snapshotChunkCursor,
+      startTimestamp: m.startTimestamp,
+      endTimestamp: past,
+      settlementTimestamp: past,
+      minTick: m.minTick,
+      maxTick: m.maxTick,
+      tickSpacing: m.tickSpacing,
+      settlementTick: m.settlementTick,
+      settlementValue: m.settlementValue,
+      liquidityParameter: m.liquidityParameter,
+      feePolicy: m.feePolicy,
+    });
+
+    const balBefore = await payment.balanceOf(user.address);
+    await core.connect(user).claimPayout(1);
+    const balAfter = await payment.balanceOf(user.address);
+    expect(balAfter).to.be.greaterThan(balBefore);
+    expect(await position.exists(1)).to.equal(false);
   });
 
   it("enforces maxCost and minProceeds, and applies fee policy", async () => {
