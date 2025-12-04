@@ -180,7 +180,7 @@ contract TradeModule is SignalsCoreStorage {
             position.upperTick,
             uint256(position.quantity).toWad()
         );
-        uint256 payout = _roundCredit(proceedsWad);
+        uint256 payout = _calculateClaimAmount(position, market, proceedsWad);
 
         if (payout > 0) {
             _pushPayment(msg.sender, payout);
@@ -505,5 +505,17 @@ contract TradeModule is SignalsCoreStorage {
             factor = WAD.wDivUp(factor);
         }
         marketTrees[marketId].applyRangeFactor(loBin, hiBin, factor);
+    }
+
+    function _calculateClaimAmount(
+        ISignalsPosition.Position memory position,
+        ISignalsCore.Market memory market,
+        uint256 proceedsWad
+    ) internal pure returns (uint256) {
+        if (!market.settled) return 0;
+        bool winning = position.lowerTick <= market.settlementTick && position.upperTick > market.settlementTick;
+        if (!winning) return 0;
+        // v0 semantics: payout is position quantity (6-dec) when in-range; proceedsWad unused for now
+        return uint256(position.quantity);
     }
 }

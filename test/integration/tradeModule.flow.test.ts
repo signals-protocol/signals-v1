@@ -147,6 +147,60 @@ describe("TradeModule flow (minimal parity)", () => {
     expect(await position.exists(1)).to.equal(false);
   });
 
+  it("reverts claim when market not settled or too early, and disallows double-claim", async () => {
+    const { user, core } = await deploySystem();
+    const quote = await core.calculateOpenCost.staticCall(1, 0, 4, 1_000);
+    await core.connect(user).openPosition(1, 0, 4, 1_000, quote);
+
+    // not settled yet
+    await expect(core.connect(user).claimPayout(1)).to.be.reverted;
+
+    // settle but too early for claim window
+    const m = await core.markets(1);
+    await core.setMarket(1, {
+      isActive: m.isActive,
+      settled: true,
+      snapshotChunksDone: m.snapshotChunksDone,
+      numBins: m.numBins,
+      openPositionCount: m.openPositionCount,
+      snapshotChunkCursor: m.snapshotChunkCursor,
+      startTimestamp: m.startTimestamp,
+      endTimestamp: m.endTimestamp,
+      settlementTimestamp: m.endTimestamp + 10n, // future relative to now
+      minTick: m.minTick,
+      maxTick: m.maxTick,
+      tickSpacing: m.tickSpacing,
+      settlementTick: m.settlementTick,
+      settlementValue: m.settlementValue,
+      liquidityParameter: m.liquidityParameter,
+      feePolicy: m.feePolicy,
+    });
+    await expect(core.connect(user).claimPayout(1)).to.be.reverted;
+
+    // allow claim by moving settlementTimestamp to past
+    const m2 = await core.markets(1);
+    await core.setMarket(1, {
+      isActive: m2.isActive,
+      settled: m2.settled,
+      snapshotChunksDone: m2.snapshotChunksDone,
+      numBins: m2.numBins,
+      openPositionCount: m2.openPositionCount,
+      snapshotChunkCursor: m2.snapshotChunkCursor,
+      startTimestamp: m2.startTimestamp,
+      endTimestamp: m2.endTimestamp,
+      settlementTimestamp: m2.endTimestamp - 1000n,
+      minTick: m2.minTick,
+      maxTick: m2.maxTick,
+      tickSpacing: m2.tickSpacing,
+      settlementTick: m2.settlementTick,
+      settlementValue: m2.settlementValue,
+      liquidityParameter: m2.liquidityParameter,
+      feePolicy: m2.feePolicy,
+    });
+    await core.connect(user).claimPayout(1);
+    await expect(core.connect(user).claimPayout(1)).to.be.reverted; // burned position
+  });
+
   it("enforces maxCost and minProceeds, and applies fee policy", async () => {
     const system = await deploySystem({}, 100); // 1% fee
     const { user, core, payment, feePolicy } = system;
