@@ -3,10 +3,11 @@ import { expect } from "chai";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import {
   MockPaymentToken,
-  MockSignalsPosition,
   MockFeePolicy,
   TradeModuleProxy,
   TradeModule,
+  SignalsPosition,
+  TestERC1967Proxy,
 } from "../../typechain-types";
 import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
 
@@ -16,7 +17,7 @@ interface DeployedSystem {
   owner: HardhatEthersSigner;
   user: HardhatEthersSigner;
   payment: MockPaymentToken;
-  position: MockSignalsPosition;
+  position: SignalsPosition;
   core: TradeModuleProxy;
   feePolicy: MockFeePolicy;
 }
@@ -31,9 +32,17 @@ describe("TradeModule flow (minimal parity)", () => {
     const payment = await (
       await ethers.getContractFactory("MockPaymentToken")
     ).deploy();
-    const position = await (
-      await ethers.getContractFactory("MockSignalsPosition")
-    ).deploy();
+    const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
+    const positionImpl = await positionImplFactory.deploy();
+    await positionImpl.waitForDeployment();
+    const positionInit = positionImplFactory.interface.encodeFunctionData("initialize", [owner.address]);
+    const positionProxy = (await (
+      await ethers.getContractFactory("TestERC1967Proxy")
+    ).deploy(positionImpl.target, positionInit)) as TestERC1967Proxy;
+    const position = (await ethers.getContractAt(
+      "SignalsPosition",
+      await positionProxy.getAddress()
+    )) as SignalsPosition;
     const feePolicy = await (
       await ethers.getContractFactory("MockFeePolicy")
     ).deploy(feeBps);
@@ -55,7 +64,7 @@ describe("TradeModule flow (minimal parity)", () => {
 
     await core.setAddresses(
       payment.target,
-      position.target,
+      await position.getAddress(),
       1,
       1,
       owner.address,
@@ -85,6 +94,8 @@ describe("TradeModule flow (minimal parity)", () => {
     await core.setMarket(1, market);
     await core.seedTree(1, [WAD, WAD, WAD, WAD]);
 
+    await position.connect(owner).setCore(core.target);
+
     // fund user
     await payment.transfer(user.address, 10_000_000n); // 10 USDC (6 decimals)
     await payment.connect(user).approve(core.target, ethers.MaxUint256);
@@ -93,7 +104,7 @@ describe("TradeModule flow (minimal parity)", () => {
       owner,
       user,
       payment: payment as MockPaymentToken,
-      position: position as MockSignalsPosition,
+      position: position as SignalsPosition,
       core: core as TradeModuleProxy,
       feePolicy: feePolicy as MockFeePolicy,
     };

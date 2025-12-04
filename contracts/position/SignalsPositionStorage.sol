@@ -9,7 +9,9 @@ abstract contract SignalsPositionStorage {
     mapping(uint256 => ISignalsPosition.Position) internal _positions;
     mapping(uint256 => uint256[]) internal _marketTokenList;
     mapping(uint256 => uint256) internal _positionMarketIndex;
+    mapping(address => uint256[]) internal _ownerTokenList;
+    mapping(uint256 => uint256) internal _positionOwnerIndex;
 
     // Reserve ample slots for future upgrades; do not change after first deployment.
-    uint256[50] internal __gap;
+    uint256[48] internal __gap;
 }
