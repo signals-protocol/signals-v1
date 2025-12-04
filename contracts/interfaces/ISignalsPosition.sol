@@ -25,4 +25,6 @@ interface ISignalsPosition {
     function getPosition(uint256 positionId) external view returns (Position memory position);
 
     function exists(uint256 positionId) external view returns (bool);
+
+    function ownerOf(uint256 positionId) external view returns (address);
 }

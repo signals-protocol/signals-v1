@@ -8,6 +8,7 @@ import "../interfaces/ISignalsPosition.sol";
 import "../errors/CLMSRErrors.sol";
 import "../errors/ModuleErrors.sol";
 import "../core/lib/SignalsDistributionMath.sol";
+import "../core/lib/SignalsClmsrMath.sol";
 import "../lib/LazyMulSegmentTree.sol";
 import "../lib/FixedPointMathU.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -21,6 +22,8 @@ contract TradeModule is SignalsCoreStorage {
     address private immutable self;
 
     using SignalsDistributionMath for LazyMulSegmentTree.Tree;
+    using SignalsClmsrMath for uint256;
+    using LazyMulSegmentTree for LazyMulSegmentTree.Tree;
     using FixedPointMathU for uint256;
     using SafeERC20 for IERC20;
 
@@ -41,12 +44,28 @@ contract TradeModule is SignalsCoreStorage {
         uint128 quantity,
         uint256 maxCost
     ) external onlyDelegated returns (uint256 positionId) {
-        marketId;
-        lowerTick;
-        upperTick;
-        quantity;
-        maxCost;
-        positionId = 0;
+        if (quantity == 0) revert CE.InvalidQuantity(quantity);
+        ISignalsCore.Market storage market = _loadAndValidateMarket(marketId);
+        _validateTickRange(lowerTick, upperTick, market);
+
+        uint256 qtyWad = uint256(quantity).toWad();
+        uint256 costWad = _calculateTradeCostInternal(marketId, lowerTick, upperTick, qtyWad);
+        uint256 cost6 = _roundDebit(costWad);
+
+        uint256 fee6 = _quoteFee(true, msg.sender, marketId, lowerTick, upperTick, quantity, cost6);
+        if (fee6 > cost6) revert CE.FeeExceedsBase(fee6, cost6);
+        uint256 totalCost = cost6 + fee6;
+        if (totalCost > maxCost) revert CE.CostExceedsMaximum(totalCost, maxCost);
+
+        _pullPayment(msg.sender, totalCost);
+        if (fee6 > 0) _pushPayment(_resolveFeeRecipient(), fee6);
+
+        _applyFactorChunked(marketId, lowerTick, upperTick, qtyWad, market.liquidityParameter, true);
+
+        positionId = positionContract.mintPosition(msg.sender, marketId, lowerTick, upperTick, quantity);
+        if (!market.settled) {
+            market.openPositionCount += 1;
+        }
     }
 
     function increasePosition(
@@ -54,9 +73,29 @@ contract TradeModule is SignalsCoreStorage {
         uint128 quantity,
         uint256 maxCost
     ) external onlyDelegated {
-        positionId;
-        quantity;
-        maxCost;
+        if (quantity == 0) revert CE.InvalidQuantity(quantity);
+        ISignalsPosition.Position memory position = positionContract.getPosition(positionId);
+        if (positionContract.ownerOf(positionId) != msg.sender) revert CE.UnauthorizedCaller(msg.sender);
+
+        ISignalsCore.Market storage market = _loadAndValidateMarket(position.marketId);
+        _validateTickRange(position.lowerTick, position.upperTick, market);
+
+        uint256 qtyWad = uint256(quantity).toWad();
+        uint256 costWad = _calculateTradeCostInternal(position.marketId, position.lowerTick, position.upperTick, qtyWad);
+        uint256 cost6 = _roundDebit(costWad);
+
+        uint256 fee6 = _quoteFee(true, msg.sender, position.marketId, position.lowerTick, position.upperTick, quantity, cost6);
+        if (fee6 > cost6) revert CE.FeeExceedsBase(fee6, cost6);
+        uint256 totalCost = cost6 + fee6;
+        if (totalCost > maxCost) revert CE.CostExceedsMaximum(totalCost, maxCost);
+
+        _pullPayment(msg.sender, totalCost);
+        if (fee6 > 0) _pushPayment(_resolveFeeRecipient(), fee6);
+
+        _applyFactorChunked(position.marketId, position.lowerTick, position.upperTick, qtyWad, market.liquidityParameter, true);
+
+        uint128 newQuantity = position.quantity + quantity;
+        positionContract.updateQuantity(positionId, newQuantity);
     }
 
     function decreasePosition(
@@ -64,21 +103,42 @@ contract TradeModule is SignalsCoreStorage {
         uint128 quantity,
         uint256 minProceeds
     ) external onlyDelegated {
-        positionId;
-        quantity;
-        minProceeds;
+        ISignalsPosition.Position memory position = positionContract.getPosition(positionId);
+        _decreasePositionInternal(position, positionId, quantity, minProceeds);
     }
 
     function closePosition(
         uint256 positionId,
         uint256 minProceeds
     ) external onlyDelegated {
-        positionId;
-        minProceeds;
+        ISignalsPosition.Position memory position = positionContract.getPosition(positionId);
+        _decreasePositionInternal(position, positionId, position.quantity, minProceeds);
     }
 
     function claimPayout(uint256 positionId) external onlyDelegated {
-        positionId;
+        ISignalsPosition.Position memory position = positionContract.getPosition(positionId);
+        if (positionContract.ownerOf(positionId) != msg.sender) revert CE.UnauthorizedCaller(msg.sender);
+
+        ISignalsCore.Market storage market = markets[position.marketId];
+        if (!market.settled) revert CE.MarketNotSettled(position.marketId);
+
+        uint64 claimOpen = (market.settlementTimestamp == 0 ? market.endTimestamp : market.settlementTimestamp) +
+            settlementFinalizeDeadline;
+        if (block.timestamp < claimOpen) revert CE.SettlementTooEarly(claimOpen, uint64(block.timestamp));
+
+        uint256 proceedsWad = _calculateSellProceeds(
+            position.marketId,
+            position.lowerTick,
+            position.upperTick,
+            uint256(position.quantity).toWad()
+        );
+        uint256 payout = _roundCredit(proceedsWad);
+
+        if (payout > 0) {
+            _pushPayment(msg.sender, payout);
+        }
+
+        positionContract.burn(positionId);
     }
 
     // --- View stubs ---
@@ -267,6 +327,53 @@ contract TradeModule is SignalsCoreStorage {
         quantityWad = tree.calculateQuantityFromCost(market.liquidityParameter, loBin, hiBin, costWad);
     }
 
+    function _decreasePositionInternal(
+        ISignalsPosition.Position memory position,
+        uint256 positionId,
+        uint128 quantity,
+        uint256 minProceeds
+    ) internal {
+        if (quantity == 0) revert CE.InvalidQuantity(quantity);
+        if (positionContract.ownerOf(positionId) != msg.sender) revert CE.UnauthorizedCaller(msg.sender);
+
+        ISignalsCore.Market storage market = _loadAndValidateMarket(position.marketId);
+        _validateTickRange(position.lowerTick, position.upperTick, market);
+
+        if (quantity > position.quantity) revert CE.InsufficientPositionQuantity(quantity, position.quantity);
+
+        uint256 qtyWad = uint256(quantity).toWad();
+        uint256 proceedsWad = _calculateSellProceeds(position.marketId, position.lowerTick, position.upperTick, qtyWad);
+        uint256 baseProceeds = _roundCredit(proceedsWad);
+
+        uint256 fee6 = _quoteFee(
+            false,
+            msg.sender,
+            position.marketId,
+            position.lowerTick,
+            position.upperTick,
+            quantity,
+            baseProceeds
+        );
+        if (fee6 > baseProceeds) revert CE.FeeExceedsBase(fee6, baseProceeds);
+        uint256 netProceeds = baseProceeds - fee6;
+        if (netProceeds < minProceeds) revert CE.ProceedsBelowMinimum(netProceeds, minProceeds);
+
+        _applyFactorChunked(position.marketId, position.lowerTick, position.upperTick, qtyWad, market.liquidityParameter, false);
+
+        _pushPayment(msg.sender, netProceeds);
+        if (fee6 > 0) _pushPayment(_resolveFeeRecipient(), fee6);
+
+        uint128 newQuantity = position.quantity - quantity;
+        if (newQuantity == 0) {
+            positionContract.burn(positionId);
+            if (!market.settled && market.openPositionCount > 0) {
+                market.openPositionCount -= 1;
+            }
+        } else {
+            positionContract.updateQuantity(positionId, newQuantity);
+        }
+    }
+
     // --- Fee/payment helpers ---
 
     function _roundDebit(uint256 wadAmount) internal pure returns (uint256) {
@@ -322,5 +429,25 @@ contract TradeModule is SignalsCoreStorage {
     function _pushPayment(address to, uint256 amount6) internal {
         if (amount6 == 0) return;
         paymentToken.safeTransfer(to, amount6);
+    }
+
+    // --- Tree update helper ---
+
+    function _applyFactorChunked(
+        uint256 marketId,
+        int256 lowerTick,
+        int256 upperTick,
+        uint256 qtyWad,
+        uint256 alpha,
+        bool isBuy
+    ) internal {
+        ISignalsCore.Market memory market = markets[marketId];
+        (uint32 loBin, uint32 hiBin) = _ticksToBins(market, lowerTick, upperTick);
+        uint256 factor = SignalsClmsrMath._safeExp(qtyWad, alpha);
+        if (!isBuy) {
+            uint256 WAD = 1e18;
+            factor = WAD.wDivUp(factor);
+        }
+        marketTrees[marketId].applyRangeFactor(loBin, hiBin, factor);
     }
 }
