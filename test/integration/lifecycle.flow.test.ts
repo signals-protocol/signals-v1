@@ -4,10 +4,11 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 import {
   MarketLifecycleModule,
   MockPaymentToken,
-  MockSignalsPosition,
   OracleModule,
   TradeModule,
   SignalsCore,
+  SignalsPosition,
+  TestERC1967Proxy,
 } from "../../typechain-types";
 
 const abiCoder = ethers.AbiCoder.defaultAbiCoder();
@@ -31,7 +32,17 @@ describe("Lifecycle + Trade integration", () => {
   async function setup() {
     const [owner, user, oracleSigner] = await ethers.getSigners();
     const payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
-    const position = await (await ethers.getContractFactory("MockSignalsPosition")).deploy();
+    const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
+    const positionImpl = await positionImplFactory.deploy();
+    await positionImpl.waitForDeployment();
+    const positionInit = positionImplFactory.interface.encodeFunctionData("initialize", [owner.address]);
+    const positionProxy = (await (
+      await ethers.getContractFactory("TestERC1967Proxy")
+    ).deploy(await positionImpl.getAddress(), positionInit)) as TestERC1967Proxy;
+    const position = (await ethers.getContractAt(
+      "SignalsPosition",
+      await positionProxy.getAddress()
+    )) as SignalsPosition;
     const lazyLib = await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy();
 
     const tradeModule = (await (
@@ -51,14 +62,17 @@ describe("Lifecycle + Trade integration", () => {
     const finalizeDeadline = 60;
     const initData = coreImpl.interface.encodeFunctionData("initialize", [
       payment.target,
-      position.target,
+      await position.getAddress(),
       submitWindow,
       finalizeDeadline,
     ]);
-    const proxy = await (await ethers.getContractFactory("TestERC1967Proxy")).deploy(coreImpl.target, initData);
-    const core = (await ethers.getContractAt("SignalsCore", proxy.target)) as SignalsCore;
+    const proxy = (await (
+      await ethers.getContractFactory("TestERC1967Proxy")
+    ).deploy(coreImpl.target, initData)) as TestERC1967Proxy;
+    const core = (await ethers.getContractAt("SignalsCore", await proxy.getAddress())) as SignalsCore;
     await core.setModules(tradeModule.target, lifecycleModule.target, ethers.ZeroAddress, ethers.ZeroAddress, oracleModule.target);
     await core.setOracleConfig(oracleSigner.address);
+    await position.connect(owner).setCore(await core.getAddress());
 
     const { chainId } = await ethers.provider.getNetwork();
 

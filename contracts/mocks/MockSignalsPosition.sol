@@ -18,6 +18,14 @@ contract MockSignalsPosition is ISignalsPosition {
     uint256 internal _nextId = 1;
     mapping(uint256 => MinimalPosition) internal _positions;
 
+    function core() external pure returns (address) {
+        return address(0);
+    }
+
+    function nextId() external view returns (uint256) {
+        return _nextId;
+    }
+
     function mintPosition(
         address trader,
         uint256 marketId,
@@ -64,7 +72,23 @@ contract MockSignalsPosition is ISignalsPosition {
         return _positions[positionId].owner;
     }
 
-    function nextId() external view returns (uint256) {
-        return _nextId;
+    function getPositionsByOwner(address) external pure returns (uint256[] memory positions_) {
+        positions_ = new uint256[](0);
+    }
+
+    function getMarketTokenLength(uint256) external pure returns (uint256 length) {
+        length = 0;
+    }
+
+    function getMarketTokenAt(uint256, uint256) external pure returns (uint256 tokenId) {
+        tokenId = 0;
+    }
+
+    function getMarketPositions(uint256) external pure returns (uint256[] memory tokenIds) {
+        tokenIds = new uint256[](0);
+    }
+
+    function getUserPositionsInMarket(address, uint256) external pure returns (uint256[] memory tokenIds) {
+        tokenIds = new uint256[](0);
     }
 }
