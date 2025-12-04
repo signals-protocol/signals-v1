@@ -21,6 +21,47 @@ interface IOwnableLite {
 contract TradeModule is SignalsCoreStorage {
     address private immutable self;
 
+    // Events mirrored from v0 for parity
+    event PositionOpened(
+        uint256 indexed positionId,
+        address indexed trader,
+        uint256 indexed marketId,
+        int256 lowerTick,
+        int256 upperTick,
+        uint128 quantity,
+        uint256 cost
+    );
+
+    event PositionIncreased(
+        uint256 indexed positionId,
+        address indexed trader,
+        uint128 deltaQuantity,
+        uint128 newQuantity,
+        uint256 cost
+    );
+
+    event PositionDecreased(
+        uint256 indexed positionId,
+        address indexed trader,
+        uint128 deltaQuantity,
+        uint128 newQuantity,
+        uint256 proceeds
+    );
+
+    event PositionClosed(uint256 indexed positionId, address indexed trader, uint256 proceeds);
+    event PositionClaimed(uint256 indexed positionId, address indexed trader, uint256 payout);
+    event PositionSettled(uint256 indexed positionId, address indexed trader, uint256 payout, bool isWin);
+
+    event TradeFeeCharged(
+        address indexed trader,
+        uint256 indexed marketId,
+        uint256 indexed positionId,
+        bool isBuy,
+        uint256 baseAmount,
+        uint256 feeAmount,
+        address feePolicy
+    );
+
     using SignalsDistributionMath for LazyMulSegmentTree.Tree;
     using SignalsClmsrMath for uint256;
     using LazyMulSegmentTree for LazyMulSegmentTree.Tree;
@@ -112,7 +153,14 @@ contract TradeModule is SignalsCoreStorage {
         uint256 minProceeds
     ) external onlyDelegated {
         ISignalsPosition.Position memory position = positionContract.getPosition(positionId);
-        _decreasePositionInternal(position, positionId, position.quantity, minProceeds);
+        (uint128 newQty, uint256 baseProceeds) = _decreasePositionInternal(
+            position,
+            positionId,
+            position.quantity,
+            minProceeds
+        );
+        require(newQty == 0, "CLOSE_INCONSISTENT");
+        emit PositionClosed(positionId, msg.sender, baseProceeds);
     }
 
     function claimPayout(uint256 positionId) external onlyDelegated {
@@ -139,6 +187,13 @@ contract TradeModule is SignalsCoreStorage {
         }
 
         positionContract.burn(positionId);
+
+        if (!positionSettledEmitted[positionId]) {
+            positionSettledEmitted[positionId] = true;
+            emit PositionSettled(positionId, msg.sender, payout, payout > 0);
+        }
+
+        emit PositionClaimed(positionId, msg.sender, payout);
     }
 
     // --- View stubs ---
@@ -333,7 +388,7 @@ contract TradeModule is SignalsCoreStorage {
         uint256 positionId,
         uint128 quantity,
         uint256 minProceeds
-    ) internal {
+    ) internal returns (uint128 newQuantity, uint256 baseProceeds) {
         if (quantity == 0) revert CE.InvalidQuantity(quantity);
         if (positionContract.ownerOf(positionId) != msg.sender) revert CE.UnauthorizedCaller(msg.sender);
 
@@ -344,7 +399,7 @@ contract TradeModule is SignalsCoreStorage {
 
         uint256 qtyWad = uint256(quantity).toWad();
         uint256 proceedsWad = _calculateSellProceeds(position.marketId, position.lowerTick, position.upperTick, qtyWad);
-        uint256 baseProceeds = _roundCredit(proceedsWad);
+        baseProceeds = _roundCredit(proceedsWad);
 
         uint256 fee6 = _quoteFee(
             false,
@@ -364,7 +419,7 @@ contract TradeModule is SignalsCoreStorage {
         _pushPayment(msg.sender, netProceeds);
         if (fee6 > 0) _pushPayment(_resolveFeeRecipient(), fee6);
 
-        uint128 newQuantity = position.quantity - quantity;
+        newQuantity = position.quantity - quantity;
         if (newQuantity == 0) {
             positionContract.burn(positionId);
             if (!market.settled && market.openPositionCount > 0) {
