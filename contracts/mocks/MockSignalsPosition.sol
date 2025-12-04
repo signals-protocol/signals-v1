@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "../interfaces/ISignalsPosition.sol";
+
+/// @notice Minimal mock position (ERC721-like) for testing TradeModule flows.
+contract MockSignalsPosition is ISignalsPosition {
+    event PositionMinted(uint256 indexed positionId, address owner);
+
+    struct MinimalPosition {
+        uint256 marketId;
+        int256 lowerTick;
+        int256 upperTick;
+        uint128 quantity;
+        address owner;
+    }
+
+    uint256 internal _nextId = 1;
+    mapping(uint256 => MinimalPosition) internal _positions;
+
+    function mintPosition(
+        address trader,
+        uint256 marketId,
+        int256 lowerTick,
+        int256 upperTick,
+        uint128 quantity
+    ) external returns (uint256 positionId) {
+        positionId = _nextId++;
+        _positions[positionId] = MinimalPosition({
+            marketId: marketId,
+            lowerTick: lowerTick,
+            upperTick: upperTick,
+            quantity: quantity,
+            owner: trader
+        });
+        emit PositionMinted(positionId, trader);
+    }
+
+    function burn(uint256 positionId) external {
+        delete _positions[positionId];
+    }
+
+    function updateQuantity(uint256 positionId, uint128 newQuantity) external {
+        MinimalPosition storage p = _positions[positionId];
+        p.quantity = newQuantity;
+    }
+
+    function getPosition(uint256 positionId) external view returns (ISignalsPosition.Position memory position) {
+        MinimalPosition memory p = _positions[positionId];
+        position = ISignalsPosition.Position({
+            marketId: p.marketId,
+            lowerTick: p.lowerTick,
+            upperTick: p.upperTick,
+            quantity: p.quantity,
+            createdAt: 0
+        });
+    }
+
+    function exists(uint256 positionId) external view returns (bool) {
+        return _positions[positionId].owner != address(0);
+    }
+
+    function ownerOf(uint256 positionId) external view returns (address) {
+        return _positions[positionId].owner;
+    }
+
+    function nextId() external view returns (uint256) {
+        return _nextId;
+    }
+}

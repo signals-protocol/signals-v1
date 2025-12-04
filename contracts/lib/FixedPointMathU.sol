@@ -4,31 +4,46 @@ pragma solidity ^0.8.24;
 /// @notice Fixed-point math utilities (WAD = 1e18) ported from v0.
 library FixedPointMathU {
     uint256 internal constant WAD = 1e18;
+    uint256 internal constant SCALE_DIFF = 1e12; // 6-dec → 18-dec
+    uint256 internal constant HALF_SCALE = SCALE_DIFF / 2;
 
     error FP_DivisionByZero();
     error FP_InvalidInput();
 
+    /// @dev 6-decimal → 18-decimal (multiply by 1e12)
     function toWad(uint256 x) internal pure returns (uint256) {
         unchecked {
-            return x * WAD;
+            return x * SCALE_DIFF;
         }
     }
 
+    /// @dev 18-decimal → 6-decimal (truncates)
     function fromWad(uint256 x) internal pure returns (uint256) {
-        return x / WAD;
+        return x / SCALE_DIFF;
     }
 
+    /// @dev 18-decimal → 6-decimal with round-up (prevents zero-cost attacks)
     function fromWadRoundUp(uint256 x) internal pure returns (uint256) {
-        return (x + WAD - 1) / WAD;
+        if (x == 0) return 0;
+        return ((x - 1) / SCALE_DIFF) + 1;
     }
 
+    /// @dev 18-decimal → 6-decimal nearest (ties up)
     function fromWadNearest(uint256 x) internal pure returns (uint256) {
-        return (x + (WAD / 2)) / WAD;
+        uint256 quotient = x / SCALE_DIFF;
+        uint256 remainder = x % SCALE_DIFF;
+        if (remainder >= HALF_SCALE) {
+            unchecked {
+                quotient += 1;
+            }
+        }
+        return quotient;
     }
 
     function fromWadNearestMin1(uint256 x) internal pure returns (uint256) {
         if (x == 0) return 0;
-        return (x + (WAD / 2)) / WAD;
+        uint256 res = fromWadNearest(x);
+        return res == 0 ? 1 : res;
     }
 
     function wMul(uint256 x, uint256 y) internal pure returns (uint256) {
