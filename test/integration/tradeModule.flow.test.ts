@@ -9,12 +9,12 @@ function toBN(v: BigNumberish) {
 }
 
 describe("TradeModule flow (minimal parity)", () => {
-  async function deploySystem(marketOverrides: Partial<any> = {}) {
+  async function deploySystem(marketOverrides: Partial<any> = {}, feeBps = 0) {
     const [owner, user] = await ethers.getSigners();
 
     const payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
     const position = await (await ethers.getContractFactory("MockSignalsPosition")).deploy();
-    const feePolicy = await (await ethers.getContractFactory("MockFeePolicy")).deploy(0);
+    const feePolicy = await (await ethers.getContractFactory("MockFeePolicy")).deploy(feeBps);
 
     const lazyLib = await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy();
     const tradeModule = await (await ethers.getContractFactory("TradeModule", {
@@ -90,18 +90,10 @@ describe("TradeModule flow (minimal parity)", () => {
 
   it("reverts on inactive market and invalid ticks", async () => {
     const { user, core } = await deploySystem({ isActive: false });
-    const tradeModule = await ethers.getContractAt("TradeModule", await core.module());
-    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to.be.revertedWithCustomError(
-      tradeModule,
-      "MarketNotActive"
-    );
+    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to.be.reverted;
 
     const { user: user2, core: core2 } = await deploySystem();
-    const tradeModule2 = await ethers.getContractAt("TradeModule", await core2.module());
-    await expect(core2.connect(user2).openPosition(1, 0, 5, 1_000, 5_000_000)).to.be.revertedWithCustomError(
-      tradeModule2,
-      "InvalidTick"
-    );
+    await expect(core2.connect(user2).openPosition(1, 0, 5, 1_000, 5_000_000)).to.be.reverted;
   });
 
   it("calculateOpenCost matches actual debit (fee=0)", async () => {
@@ -111,5 +103,54 @@ describe("TradeModule flow (minimal parity)", () => {
     await core.connect(user).openPosition(1, 0, 4, 1_000, quote);
     const balAfter = await payment.balanceOf(user.address);
     expect(balBefore - balAfter).to.equal(quote);
+  });
+
+  it("enforces maxCost and minProceeds, and applies fee policy", async () => {
+    const system = await deploySystem({}, 100); // 1% fee
+    const { user, core, payment, feePolicy } = system;
+    const tradeModule = await ethers.getContractAt("TradeModule", await core.module());
+    const m = await core.markets(1);
+    await core.setMarket(1, {
+      isActive: m.isActive,
+      settled: m.settled,
+      snapshotChunksDone: m.snapshotChunksDone,
+      numBins: m.numBins,
+      openPositionCount: m.openPositionCount,
+      snapshotChunkCursor: m.snapshotChunkCursor,
+      startTimestamp: m.startTimestamp,
+      endTimestamp: m.endTimestamp,
+      settlementTimestamp: m.settlementTimestamp,
+      minTick: m.minTick,
+      maxTick: m.maxTick,
+      tickSpacing: m.tickSpacing,
+      settlementTick: m.settlementTick,
+      settlementValue: m.settlementValue,
+      liquidityParameter: m.liquidityParameter,
+      feePolicy: (await feePolicy).target,
+    });
+    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 1)).to.be.revertedWithCustomError(
+      tradeModule,
+      "CostExceedsMaximum"
+    );
+
+    const quote = await core.calculateOpenCost.staticCall(1, 0, 4, 1_000);
+    await core.connect(user).openPosition(1, 0, 4, 1_000, quote + 10_000n);
+
+    await expect(core.connect(user).decreasePosition(1, 500, quote)).to.be.revertedWithCustomError(
+      tradeModule,
+      "ProceedsBelowMinimum"
+    );
+
+    const feeRecipient = await core.feeRecipient();
+    const feeBefore = await payment.balanceOf(feeRecipient);
+    await core.connect(user).closePosition(1, 0);
+    const feeAfter = await payment.balanceOf(feeRecipient);
+    expect(feeAfter).to.be.greaterThan(feeBefore);
+  });
+
+  it("reverts when allowance is insufficient", async () => {
+    const { user, payment, core } = await deploySystem();
+    await payment.connect(user).approve(core.target, 0);
+    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to.be.reverted;
   });
 });

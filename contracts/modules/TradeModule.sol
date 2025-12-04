@@ -243,6 +243,7 @@ contract TradeModule is SignalsCoreStorage {
     {
         market = markets[marketId];
         if (!_marketExists(marketId)) revert CE.MarketNotFound(marketId);
+        if (market.settled) revert CE.MarketAlreadySettled(marketId);
         if (!market.isActive) revert CE.MarketNotActive();
         if (block.timestamp < market.startTimestamp) revert CE.MarketNotStarted();
         if (block.timestamp > market.endTimestamp) revert CE.MarketExpired();
