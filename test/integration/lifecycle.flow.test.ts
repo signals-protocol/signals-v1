@@ -166,4 +166,56 @@ describe("Lifecycle + Trade integration", () => {
     expect(balAfter - balBefore).to.equal(1_000);
     expect(await position.exists(positionId)).to.equal(false);
   });
+
+  it("burns loser positions with zero payout and prevents double-claim", async () => {
+    const {
+      owner,
+      user,
+      oracleSigner,
+      payment,
+      position,
+      core,
+      lifecycleModule,
+      chainId,
+    } = await setup();
+
+    const lifecycleEvents = lifecycleModule.attach(await core.getAddress());
+
+    const now = BigInt(await time.latest());
+    const start = now - 50n;
+    const end = now + 200n;
+    const settlementTs = end + 10n;
+    await core.createMarket(0, 4, 1, Number(start), Number(end), Number(settlementTs), 4, ethers.parseEther("1"), ethers.ZeroAddress);
+
+    await payment.transfer(user.address, 10_000_000n);
+    await payment.connect(user).approve(await core.getAddress(), ethers.MaxUint256);
+
+    const pos1 = await position.nextId(); // winner
+    await core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000);
+    const pos2 = Number(pos1) + 1; // loser (upper range)
+    await core.connect(user).openPosition(1, 3, 4, 1_000, 5_000_000);
+
+    const priceTimestamp = end + 5n;
+    await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
+    const digest = buildDigest(chainId, await core.getAddress(), 1, 1n, priceTimestamp);
+    const signature = await oracleSigner.signMessage(ethers.getBytes(digest));
+    await core.submitSettlementPrice(1, 1n, priceTimestamp, signature);
+    await time.setNextBlockTimestamp(Number(priceTimestamp + 2n));
+    await core.settleMarket(1);
+    await expect(core.requestSettlementChunks(1, 5))
+      .to.emit(lifecycleEvents, "SettlementChunkRequested")
+      .withArgs(1, 0);
+
+    await time.increase(61); // finalize window
+
+    const balBefore = await payment.balanceOf(user.address);
+    await core.connect(user).claimPayout(pos1);
+    await core.connect(user).claimPayout(pos2);
+    const balAfter = await payment.balanceOf(user.address);
+    expect(balAfter - balBefore).to.equal(1_000); // loser payout zero
+    expect(await position.exists(pos1)).to.equal(false);
+    expect(await position.exists(pos2)).to.equal(false);
+
+    await expect(core.connect(user).claimPayout(pos1)).to.be.reverted;
+  });
 });

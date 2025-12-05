@@ -114,4 +114,78 @@ describe("SignalsPosition", () => {
     expect(sort(await position.getUserPositionsInMarket(bob.address, 1))).to.deep.equal([2]);
     expect(await position.getMarketTokenAt(1, 2)).to.equal(0); // hole marker
   });
+
+  it("mirrors JS state across random mint/transfer/burn sequence", async () => {
+    const [core, alice, bob, carol] = await ethers.getSigners();
+    const position = await deployPosition(core.address);
+
+    type PosState = { owner: string; market: number; alive: boolean; marketIndex: number };
+    const states: Record<number, PosState> = {};
+    const ownerLists: Record<string, number[]> = { [alice.address]: [], [bob.address]: [], [carol.address]: [] };
+    const marketLists: Record<number, number[]> = {};
+
+    let nextId = 1;
+    function addOwner(owner: string, id: number) {
+      ownerLists[owner].push(id);
+    }
+    function removeOwner(owner: string, id: number) {
+      const arr = ownerLists[owner];
+      const idx = arr.indexOf(id);
+      if (idx >= 0) {
+        arr.splice(idx, 1);
+      }
+    }
+
+    async function mint(owner: any, market: number, lower: number, upper: number) {
+      const id = nextId++;
+      await position.connect(core).mintPosition(owner.address, market, lower, upper, 1_000);
+      if (!marketLists[market]) marketLists[market] = [];
+      marketLists[market].push(id);
+      states[id] = { owner: owner.address, market, alive: true, marketIndex: marketLists[market].length };
+      addOwner(owner.address, id);
+      return id;
+    }
+
+    async function transfer(from: any, to: any, id: number) {
+      await position.connect(from)["safeTransferFrom(address,address,uint256)"](from.address, to.address, id);
+      removeOwner(from.address, id);
+      addOwner(to.address, id);
+      states[id].owner = to.address;
+    }
+
+    async function burn(id: number) {
+      await position.connect(core).burn(id);
+      const st = states[id];
+      st.alive = false;
+      const arr = marketLists[st.market];
+      arr[st.marketIndex - 1] = 0;
+      removeOwner(st.owner, id);
+    }
+
+    // sequence
+    const id1 = await mint(alice, 1, 0, 1);
+    const id2 = await mint(bob, 1, 1, 2);
+    const id3 = await mint(carol, 2, 0, 1);
+    await transfer(alice, bob, id1);
+    await burn(id2);
+    const id4 = await mint(alice, 1, 2, 3);
+    await transfer(bob, carol, id1);
+    await burn(id3);
+
+    // assertions vs contract
+    const list1 = await position.getMarketPositions(1);
+    const list2 = await position.getMarketPositions(2);
+    expect(list1.map(Number)).to.deep.equal(marketLists[1].map(Number));
+    expect(list2.map(Number)).to.deep.equal(marketLists[2].map(Number));
+
+    expect((await position.getUserPositionsInMarket(alice.address, 1)).map(Number).sort()).to.deep.equal(
+      ownerLists[alice.address].filter((id) => states[id].market === 1).sort()
+    );
+    expect((await position.getUserPositionsInMarket(bob.address, 1)).map(Number).sort()).to.deep.equal(
+      ownerLists[bob.address].filter((id) => states[id].market === 1).sort()
+    );
+    expect((await position.getUserPositionsInMarket(carol.address, 1)).map(Number).sort()).to.deep.equal(
+      ownerLists[carol.address].filter((id) => states[id].market === 1).sort()
+    );
+  });
 });
