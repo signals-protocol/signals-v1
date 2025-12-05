@@ -21,4 +21,16 @@ describe("Access / Upgrade guards", () => {
       tradeModule.openPosition(1, 0, 1, 1_000, 1)
     ).to.be.revertedWithCustomError(tradeModule, "NotDelegated");
   });
+
+  it("rejects upgrade from non-owner", async () => {
+    const [owner, attacker] = await ethers.getSigners();
+    const posFactory = await ethers.getContractFactory("SignalsPosition");
+    const proxy = await upgrades.deployProxy(posFactory, [owner.address], { kind: "uups" });
+    await proxy.waitForDeployment();
+
+    const newImpl = await posFactory.deploy();
+    await newImpl.waitForDeployment();
+    const rogue = new ethers.Contract(await proxy.getAddress(), ["function upgradeTo(address)"], attacker);
+    await expect(rogue.upgradeTo(await newImpl.getAddress())).to.be.reverted;
+  });
 });
