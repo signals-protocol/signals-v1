@@ -218,4 +218,43 @@ describe("Lifecycle + Trade integration", () => {
 
     await expect(core.connect(user).claimPayout(pos1)).to.be.reverted;
   });
+
+  it("enforces time gates for trading, settlement, and claim windows", async () => {
+    const { owner, user, oracleSigner, payment, position, core, chainId } = await setup();
+    const now = BigInt(await time.latest());
+    const start = now + 100n;
+    const end = start + 100n;
+    const settlementTs = end + 50n;
+    await core.createMarket(0, 4, 1, Number(start), Number(end), Number(settlementTs), 4, ethers.parseEther("1"), ethers.ZeroAddress);
+
+    await payment.transfer(user.address, 10_000_000n);
+    await payment.connect(user).approve(await core.getAddress(), ethers.MaxUint256);
+
+    // too early to trade
+    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to.be.reverted;
+
+    await time.setNextBlockTimestamp(Number(start + 1n));
+    await core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000);
+
+    // after endTimestamp trading should revert
+    await time.setNextBlockTimestamp(Number(end + 1n));
+    await expect(core.connect(user).increasePosition(1, 1_000, 5_000_000)).to.be.reverted;
+
+    // settlement too early
+    await expect(core.settleMarket(1)).to.be.reverted;
+
+    // submit settlement and settle within window
+    const priceTimestamp = end + 10n;
+    await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
+    const digest = buildDigest(chainId, await core.getAddress(), 1, 1n, priceTimestamp);
+    const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
+    await core.submitSettlementPrice(1, 1n, priceTimestamp, sig);
+    await core.settleMarket(1);
+
+    // claim too early (claim gate = settlementTimestamp + finalizeDeadline(60))
+    await expect(core.connect(user).claimPayout(1)).to.be.reverted;
+
+    await time.increase(61);
+    await core.connect(user).claimPayout(1);
+  });
 });

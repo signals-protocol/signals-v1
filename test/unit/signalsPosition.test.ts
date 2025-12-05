@@ -162,15 +162,44 @@ describe("SignalsPosition", () => {
       removeOwner(st.owner, id);
     }
 
-    // sequence
-    const id1 = await mint(alice, 1, 0, 1);
-    const id2 = await mint(bob, 1, 1, 2);
-    const id3 = await mint(carol, 2, 0, 1);
-    await transfer(alice, bob, id1);
-    await burn(id2);
-    const id4 = await mint(alice, 1, 2, 3);
-    await transfer(bob, carol, id1);
-    await burn(id3);
+    // deterministic pseudo-random sequence
+    const ops = 20;
+    let seed = 12345;
+    function rand(max: number) {
+      seed = (seed * 1664525 + 1013904223) % 0xffffffff;
+      return seed % max;
+    }
+    const users = [alice, bob, carol];
+    for (let i = 0; i < ops; i++) {
+      const action = rand(3);
+      if (action === 0 || Object.keys(states).length === 0) {
+        // mint
+        const owner = users[rand(users.length)];
+        const market = (rand(3) % 3) + 1;
+        const lower = rand(3);
+        const upper = lower + 1;
+        await mint(owner, market, lower, upper);
+      } else if (action === 1) {
+        // transfer
+        const aliveIds = Object.keys(states)
+          .map(Number)
+          .filter((id) => states[id].alive);
+        const id = aliveIds[rand(aliveIds.length)];
+        const currentOwner = states[id].owner;
+        const to = users[rand(users.length)];
+        if (to.address === currentOwner) continue;
+        const fromSigner = users.find((u) => u.address === currentOwner)!;
+        await transfer(fromSigner, to, id);
+      } else {
+        // burn
+        const aliveIds = Object.keys(states)
+          .map(Number)
+          .filter((id) => states[id].alive);
+        if (aliveIds.length === 0) continue;
+        const id = aliveIds[rand(aliveIds.length)];
+        await burn(id);
+      }
+    }
 
     // assertions vs contract
     const list1 = await position.getMarketPositions(1);
