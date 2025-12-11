@@ -17,7 +17,7 @@ Modular on-chain architecture for the Signals prediction market protocol, built 
 | `VaultAccountingLib`    | ✅     | NAV, price, peak, drawdown calculations            |
 | `LazyMulSegmentTree`    | ✅     | O(log n) range queries for CLMSR distribution      |
 
-**396 tests passing** — SDK parity, fuzz, stress, invariants, vault batch flow, security.
+**372 tests passing** — SDK parity, fuzz, stress, invariants, vault batch flow, security.
 
 ### Progress
 
@@ -151,8 +151,21 @@ DD_t = 1 - P_t / P^peak_t   (drawdown)
 Key invariants tested:
 
 - Price preservation: |N'/S' - P| ≤ 1 wei after deposit/withdraw
-- Peak monotonicity: P^peak*t ≥ P^peak*{t-1}
+- Peak monotonicity: P^peak_t ≥ P^peak_{t-1}
 - Drawdown range: 0 ≤ DD_t ≤ 100%
+- Deposit dust refund: A_used = S_mint × P, refund = A - A_used (whitepaper C.1)
+- NAV underflow protection: Reverts if loss > NAV (Safety Layer should prevent)
+
+### Phase 4 Scope Notes
+
+The following features are **intentionally deferred to Phase 5**:
+
+| Feature | Phase 4 Behavior | Phase 5 Implementation |
+|---------|------------------|------------------------|
+| Withdrawal lag (D_lag) | Stored but not enforced; all withdrawals processed immediately | Eligibility check: `timestamp >= requestTimestamp + D_lag` |
+| Deposit dust refund | Dust accumulates in contract | Per-request ID tracking with immediate refund |
+| NAV underflow | Reverts with `NAVUnderflow` | Safety Layer prevents via Backstop Grants (G_t) |
+| Empty vault (S=0) | Price=1.0, peak preserved, drawdown=0 | Documented edge case behavior |
 
 ## Documentation
 

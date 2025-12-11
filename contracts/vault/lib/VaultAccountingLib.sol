@@ -26,6 +26,8 @@ library VaultAccountingLib {
     error ZeroPriceNotAllowed();
     error InsufficientShares(uint256 requested, uint256 available);
     error InsufficientNAV(uint256 requested, uint256 available);
+    /// @notice NAV would go negative after applying P&L (Safety Layer should prevent this)
+    error NAVUnderflow(uint256 navPrev, uint256 loss);
 
     // ============================================================
     // Structs
@@ -63,6 +65,10 @@ library VaultAccountingLib {
      * @notice Compute pre-batch NAV and batch price
      * @dev N^pre_t = N_{t-1} + L_t + F_t + G_t
      *      P^e_t = N^pre_t / S_{t-1}
+     * 
+     *      Per whitepaper Section 3: Safety Layer should ensure NAV never goes negative
+     *      via Backstop Grants (G_t). If NAV would go negative, this reverts with NAVUnderflow.
+     * 
      * @param inputs Pre-batch inputs
      * @return result Pre-batch NAV and price
      */
@@ -75,8 +81,12 @@ library VaultAccountingLib {
             result.navPre = inputs.navPrev + uint256(pi);
         } else {
             uint256 loss = uint256(-pi);
-            // NAV cannot go negative; clamp at 0
-            result.navPre = inputs.navPrev > loss ? inputs.navPrev - loss : 0;
+            // Per whitepaper: Safety Layer must prevent NAV from going negative
+            // If this happens, it indicates a Safety Layer failure - revert rather than silently clamp
+            if (loss > inputs.navPrev) {
+                revert NAVUnderflow(inputs.navPrev, loss);
+            }
+            result.navPre = inputs.navPrev - loss;
         }
 
         // P^e_t = N^pre_t / S_{t-1}
@@ -89,6 +99,7 @@ library VaultAccountingLib {
     /**
      * @notice Compute pre-batch for seeding scenario (first deposit)
      * @dev When S_{t-1} = 0, price is set to 1e18 (1.0)
+     *      Seeding should only happen with fresh vault (navPrev=0, pnl=0, fees=0, grant=0)
      * @param navPrev Previous NAV (should be 0 for fresh vault)
      * @param pnl P&L (should be 0 for fresh vault)
      * @param fees Fees (should be 0 for fresh vault)
@@ -107,7 +118,11 @@ library VaultAccountingLib {
             navPre = navPrev + uint256(pi);
         } else {
             uint256 loss = uint256(-pi);
-            navPre = navPrev > loss ? navPrev - loss : 0;
+            // For seeding, NAV underflow should never happen, but revert if it does
+            if (loss > navPrev) {
+                revert NAVUnderflow(navPrev, loss);
+            }
+            navPre = navPrev - loss;
         }
         // For seeding, price is always 1.0
         batchPrice = WAD;
@@ -119,30 +134,44 @@ library VaultAccountingLib {
 
     /**
      * @notice Apply deposit to vault state
-     * @dev (N', S') = (N + D, S + D/P) preserves N'/S' = P
+     * @dev Per whitepaper Appendix C (b1):
+     *      S_mint = floor(A / P)
+     *      A_used = S_mint * P
+     *      Residual A - A_used is refunded (handled by caller)
+     * 
+     *      This preserves N'/S' = P within 1 wei tolerance.
+     * 
      * @param nav Current NAV (WAD)
      * @param shares Current shares (WAD)
      * @param price Batch price P (WAD)
      * @param depositAmount Deposit amount D (WAD)
-     * @return newNav Updated NAV (WAD)
+     * @return newNav Updated NAV (WAD) - only A_used is added
      * @return newShares Updated shares (WAD)
      * @return mintedShares Shares minted (WAD)
+     * @return refundAmount Amount to refund to depositor (WAD)
      */
     function applyDeposit(
         uint256 nav,
         uint256 shares,
         uint256 price,
         uint256 depositAmount
-    ) internal pure returns (uint256 newNav, uint256 newShares, uint256 mintedShares) {
+    ) internal pure returns (uint256 newNav, uint256 newShares, uint256 mintedShares, uint256 refundAmount) {
         if (price == 0) revert ZeroPriceNotAllowed();
         
-        // N' = N + D
-        newNav = nav + depositAmount;
-        
-        // S' = S + D/P (mint shares)
-        // Round down minted shares to favor protocol
+        // S_mint = floor(A / P) - round down shares to favor protocol
         mintedShares = depositAmount.wDiv(price);
+        
+        // A_used = S_mint * P - round down to favor protocol
+        uint256 amountUsed = mintedShares.wMul(price);
+        
+        // N' = N + A_used (NOT full depositAmount)
+        newNav = nav + amountUsed;
+        
+        // S' = S + S_mint
         newShares = shares + mintedShares;
+        
+        // Refund = A - A_used (at most 1 wei per whitepaper)
+        refundAmount = depositAmount - amountUsed;
     }
 
     // ============================================================
@@ -226,19 +255,29 @@ library VaultAccountingLib {
 
     /**
      * @notice Compute final price from NAV and shares
+     * @dev When shares=0 (empty vault), price defaults to 1.0 (WAD)
+     *      This is an edge case that should rarely occur in practice.
      * @param nav Final NAV (WAD)
      * @param shares Final shares (WAD)
      * @return price Final price P_t (WAD)
      */
     function computePrice(uint256 nav, uint256 shares) internal pure returns (uint256 price) {
         if (shares == 0) {
-            return WAD; // Default to 1.0 if no shares
+            return WAD; // Default to 1.0 if no shares (empty vault)
         }
         price = nav.wDiv(shares);
     }
 
     /**
      * @notice Full post-batch state calculation
+     * @dev When shares=0 (all LPs exited):
+     *      - price defaults to 1.0 (WAD)
+     *      - pricePeak is preserved from previous state
+     *      - drawdown is set to 0 (no active LP exposure)
+     * 
+     *      This ensures drawdown-based calculations (like α_limit) don't
+     *      produce misleading values when the vault is empty.
+     * 
      * @param nav Final NAV after deposits/withdrawals
      * @param shares Final shares after deposits/withdrawals
      * @param previousPeak Previous peak price
@@ -251,9 +290,17 @@ library VaultAccountingLib {
     ) internal pure returns (PostBatchState memory state) {
         state.nav = nav;
         state.shares = shares;
-        state.price = computePrice(nav, shares);
-        state.pricePeak = updatePeak(previousPeak, state.price);
-        state.drawdown = computeDrawdown(state.price, state.pricePeak);
+        
+        if (shares == 0) {
+            // Empty vault: preserve peak, set price to 1.0, drawdown to 0
+            state.price = WAD;
+            state.pricePeak = previousPeak;
+            state.drawdown = 0;
+        } else {
+            state.price = computePrice(nav, shares);
+            state.pricePeak = updatePeak(previousPeak, state.price);
+            state.drawdown = computeDrawdown(state.price, state.pricePeak);
+        }
     }
 }
 

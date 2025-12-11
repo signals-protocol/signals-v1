@@ -86,20 +86,17 @@ describe("VaultAccountingLib", () => {
       expect(navPre).to.equal(navPrev);
     });
 
-    it("clamps NAV at 0 when loss exceeds nav", async () => {
+    it("reverts with NAVUnderflow when loss exceeds nav", async () => {
       const navPrev = ethers.parseEther("100");
       const sharesPrev = ethers.parseEther("100");
       const pnl = ethers.parseEther("-200"); // loss > nav
 
-      const [navPre] = await lib.computePreBatch(
-        navPrev,
-        sharesPrev,
-        pnl,
-        0n,
-        0n
-      );
-
-      expect(navPre).to.equal(0n);
+      // Per whitepaper: Safety Layer should prevent this via Backstop Grants
+      // If it happens, revert rather than silently clamp
+      await expect(
+        lib.computePreBatch(navPrev, sharesPrev, pnl, 0n, 0n)
+      ).to.be.revertedWithCustomError(lib, "NAVUnderflow")
+        .withArgs(navPrev, ethers.parseEther("200"));
     });
   });
 
@@ -176,7 +173,8 @@ describe("VaultAccountingLib", () => {
 
   // ============================================================
   // INV-V4: Deposit price preservation
-  // After deposit D: N' = N + D, S' = S + D/P, |N'/S' - P| <= 1 wei
+  // Per whitepaper C.1(b1): S_mint = floor(A/P), A_used = S_mint * P
+  // N' = N + A_used, S' = S + S_mint, refund = A - A_used
   // ============================================================
   describe("INV-V4: applyDeposit", () => {
     it("increases NAV and shares proportionally", async () => {
@@ -185,16 +183,18 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1"); // P = 1.0
       const deposit = ethers.parseEther("100");
 
-      const [newNav, newShares, minted] = await lib.applyDeposit(
+      const [newNav, newShares, minted, refund] = await lib.applyDeposit(
         nav,
         shares,
         price,
         deposit
       );
 
+      // At P=1.0, A_used = minted * 1 = deposit (no dust)
       expect(newNav).to.equal(ethers.parseEther("1100"));
       expect(minted).to.equal(ethers.parseEther("100"));
       expect(newShares).to.equal(ethers.parseEther("1100"));
+      expect(refund).to.equal(0n); // No dust at P=1.0
     });
 
     it("preserves price within 1 wei after deposit", async () => {
@@ -203,7 +203,7 @@ describe("VaultAccountingLib", () => {
       const price = (nav * WAD) / shares; // ~1.111e18
       const deposit = ethers.parseEther("100");
 
-      const [newNav, newShares] = await lib.applyDeposit(
+      const [newNav, newShares, , refund] = await lib.applyDeposit(
         nav,
         shares,
         price,
@@ -214,6 +214,9 @@ describe("VaultAccountingLib", () => {
       // Price preservation: |newPrice - price| <= 1 wei
       const diff = newPrice > price ? newPrice - price : price - newPrice;
       expect(diff).to.be.lte(1n);
+      
+      // Refund should be small (at most 1 wei per whitepaper)
+      expect(refund).to.be.lte(1n);
     });
 
     it("handles large deposit", async () => {
@@ -222,7 +225,7 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1");
       const deposit = ethers.parseEther("1000000"); // 1M deposit
 
-      const [newNav, newShares] = await lib.applyDeposit(
+      const [newNav, newShares, , refund] = await lib.applyDeposit(
         nav,
         shares,
         price,
@@ -231,12 +234,43 @@ describe("VaultAccountingLib", () => {
 
       expect(newNav).to.equal(ethers.parseEther("1001000"));
       expect(newShares).to.equal(ethers.parseEther("1001000"));
+      expect(refund).to.equal(0n); // No dust at P=1.0
     });
 
     it("reverts with zero price", async () => {
       await expect(
         lib.applyDeposit(WAD, WAD, 0n, WAD)
       ).to.be.revertedWithCustomError(lib, "ZeroPriceNotAllowed");
+    });
+
+    it("refunds deposit dust per whitepaper C.1(b1)", async () => {
+      // Use a price that doesn't divide evenly
+      const nav = ethers.parseEther("1000");
+      const shares = ethers.parseEther("700"); // Price = 1000/700 ≈ 1.4285...
+      const price = (nav * WAD) / shares;
+      const deposit = ethers.parseEther("100");
+
+      const [newNav, , minted, refund] = await lib.applyDeposit(
+        nav,
+        shares,
+        price,
+        deposit
+      );
+
+      // S_mint = floor(100 / 1.4285...) = 70
+      // A_used = 70 * 1.4285... = 99.999...
+      // refund = 100 - A_used (small dust)
+      
+      // Verify: newNav = nav + A_used (NOT nav + deposit)
+      const amountUsed = (minted * price) / WAD;
+      expect(newNav).to.equal(nav + amountUsed);
+      
+      // Verify: refund = deposit - A_used
+      expect(refund).to.equal(deposit - amountUsed);
+      
+      // Verify: refund is at most 1 wei (per whitepaper)
+      // Note: In WAD terms, this can be up to ~price wei
+      expect(refund).to.be.lt(price);
     });
   });
 
@@ -470,6 +504,25 @@ describe("VaultAccountingLib", () => {
       // DD = 1 - 0.9/1.2 = 0.25
       expect(drawdown).to.equal(ethers.parseEther("0.25"));
     });
+
+    it("handles empty vault (shares=0) correctly", async () => {
+      // When all LPs exit, shares=0
+      const nav = 0n;
+      const shares = 0n;
+      const previousPeak = ethers.parseEther("1.5"); // Had a peak before
+
+      const [navOut, sharesOut, price, pricePeak, drawdown] =
+        await lib.computePostBatchState(nav, shares, previousPeak);
+
+      expect(navOut).to.equal(0n);
+      expect(sharesOut).to.equal(0n);
+      // Per whitepaper: empty vault defaults to price=1.0
+      expect(price).to.equal(WAD);
+      // Peak is preserved from previous state
+      expect(pricePeak).to.equal(previousPeak);
+      // Drawdown is 0 for empty vault (no active LP exposure)
+      expect(drawdown).to.equal(0n);
+    });
   });
 
   // ============================================================
@@ -511,19 +564,18 @@ describe("VaultAccountingLib", () => {
       let shares = ethers.parseEther("1000");
       const price = ethers.parseEther("1");
 
-      // Multiple operations
-      [nav, shares] = (
-        await lib.applyDeposit(nav, shares, price, ethers.parseEther("50"))
-      ).slice(0, 2) as [bigint, bigint];
-      [nav, shares] = (
-        await lib.applyDeposit(nav, shares, price, ethers.parseEther("30"))
-      ).slice(0, 2) as [bigint, bigint];
-      [nav, shares] = (
-        await lib.applyWithdraw(nav, shares, price, ethers.parseEther("20"))
-      ).slice(0, 2) as [bigint, bigint];
-      [nav, shares] = (
-        await lib.applyDeposit(nav, shares, price, ethers.parseEther("100"))
-      ).slice(0, 2) as [bigint, bigint];
+      // Multiple operations - note: applyDeposit now returns 4 values
+      let result = await lib.applyDeposit(nav, shares, price, ethers.parseEther("50"));
+      nav = result[0]; shares = result[1];
+      
+      result = await lib.applyDeposit(nav, shares, price, ethers.parseEther("30"));
+      nav = result[0]; shares = result[1];
+      
+      const wdResult = await lib.applyWithdraw(nav, shares, price, ethers.parseEther("20"));
+      nav = wdResult[0]; shares = wdResult[1];
+      
+      result = await lib.applyDeposit(nav, shares, price, ethers.parseEther("100"));
+      nav = result[0]; shares = result[1];
 
       // Final price should still be ~1.0
       const finalPrice = shares > 0n ? (nav * WAD) / shares : WAD;

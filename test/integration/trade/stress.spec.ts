@@ -1,80 +1,10 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
-import {
-  SignalsPosition,
-  TestERC1967Proxy,
-} from "../../../typechain-types";
-import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleProxy";
-import { WAD } from "../../helpers/constants";
-
-async function deploySystem(numBins: number, spacing: number, endOffset = 10_000) {
-  const [owner, ...users] = await ethers.getSigners();
-  const payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
-  const feePolicy = await (await ethers.getContractFactory("MockFeePolicy")).deploy(0);
-  const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
-  const positionImpl = await positionImplFactory.deploy();
-  await positionImpl.waitForDeployment();
-  const initData = positionImplFactory.interface.encodeFunctionData("initialize", [owner.address]);
-  const positionProxy = (await (
-    await ethers.getContractFactory("TestERC1967Proxy")
-  ).deploy(await positionImpl.getAddress(), initData)) as TestERC1967Proxy;
-  const position = (await ethers.getContractAt(
-    "SignalsPosition",
-    await positionProxy.getAddress()
-  )) as SignalsPosition;
-
-  const lazy = await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy();
-  const tradeModule = await (
-    await ethers.getContractFactory("TradeModule", { libraries: { LazyMulSegmentTree: lazy.target } })
-  ).deploy();
-  const core = await (
-    await ethers.getContractFactory("TradeModuleProxy", { libraries: { LazyMulSegmentTree: lazy.target } })
-  ).deploy(tradeModule.target);
-
-  await core.setAddresses(
-    payment.target,
-    await position.getAddress(),
-    300,
-    60,
-    owner.address,
-    feePolicy.target
-  );
-
-  const now = (await ethers.provider.getBlock("latest"))!.timestamp;
-  const market: ISignalsCore.MarketStruct = {
-    isActive: true,
-    settled: false,
-    snapshotChunksDone: false,
-    numBins,
-    openPositionCount: 0,
-    snapshotChunkCursor: 0,
-    startTimestamp: now - 10,
-    endTimestamp: now + endOffset,
-    settlementTimestamp: now + endOffset,
-    minTick: 0,
-    maxTick: numBins,
-    tickSpacing: spacing,
-    settlementTick: 0,
-    settlementValue: 0,
-    liquidityParameter: WAD,
-    feePolicy: ethers.ZeroAddress,
-  };
-  await core.setMarket(1, market);
-  const factors = Array.from({ length: numBins }, () => WAD);
-  await core.seedTree(1, factors);
-  await position.connect(owner).setCore(core.target);
-
-  for (const u of users.slice(0, 5)) {
-    await payment.transfer(u.address, 100_000_000n);
-    await payment.connect(u).approve(core.target, ethers.MaxUint256);
-  }
-
-  return { owner, users: users.slice(0, 5), payment, feePolicy, position, tradeModule, core };
-}
+import { deployLargeBinSystem, deployTradeModuleSystem } from "../../helpers/deploy";
 
 describe("TradeModule stress and boundary scenarios", () => {
   it("handles many positions on large bin market without miscounting", async () => {
-    const { users, core, position } = await deploySystem(128, 1);
+    const { users, core, position } = await deployLargeBinSystem(128);
     let nextId = Number(await position.nextId());
     let seed = 424242;
     const rand = (max: number) => {
@@ -109,7 +39,10 @@ describe("TradeModule stress and boundary scenarios", () => {
   });
 
   it("reverts trades after market expiry and honors slippage near endTimestamp", async () => {
-    const { users, core, tradeModule } = await deploySystem(8, 1, 50);
+    const { users, core, tradeModule } = await deployTradeModuleSystem({
+      markets: [{ numBins: 8, tickSpacing: 1, minTick: 0, maxTick: 8, endOffset: 50 }],
+      userCount: 1,
+    });
     const user = users[0];
     const quote = await core.calculateOpenCost.staticCall(1, 0, 4, 1_000);
     await core.connect(user).openPosition(1, 0, 4, 1_000, quote + 1_000n);

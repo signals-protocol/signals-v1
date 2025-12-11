@@ -1,4 +1,228 @@
 import { ethers } from "hardhat";
+import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import {
+  MockPaymentToken,
+  MockFeePolicy,
+  TradeModuleProxy,
+  TradeModule,
+  SignalsPosition,
+} from "../../typechain-types";
+import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
+import { WAD, USDC_DECIMALS } from "./constants";
+
+// ============================================================
+// Type Definitions
+// ============================================================
+
+export interface TradeModuleSystem {
+  owner: HardhatEthersSigner;
+  users: HardhatEthersSigner[];
+  payment: MockPaymentToken;
+  position: SignalsPosition;
+  feePolicy: MockFeePolicy;
+  tradeModule: TradeModule;
+  core: TradeModuleProxy;
+}
+
+export interface MarketConfig {
+  numBins: number;
+  tickSpacing: number;
+  minTick: number;
+  maxTick: number;
+  endOffset?: number;
+  liquidityParameter?: bigint;
+  feeRate?: number;
+}
+
+export interface DeployOptions {
+  markets?: MarketConfig[];
+  userCount?: number;
+  fundAmount?: bigint;
+  submitWindow?: number;
+  settlementWindow?: number;
+}
+
+const DEFAULT_MARKET_CONFIG: MarketConfig = {
+  numBins: 4,
+  tickSpacing: 1,
+  minTick: 0,
+  maxTick: 4,
+  endOffset: 10_000,
+  liquidityParameter: WAD,
+};
+
+const DEFAULT_DEPLOY_OPTIONS: DeployOptions = {
+  markets: [DEFAULT_MARKET_CONFIG],
+  userCount: 5,
+  fundAmount: ethers.parseUnits("100000", USDC_DECIMALS),
+  submitWindow: 300,
+  settlementWindow: 60,
+};
+
+// ============================================================
+// Core Deployment Functions
+// ============================================================
+
+/**
+ * Deploy a complete TradeModule system with configurable options.
+ * This is the primary fixture for trade-related tests.
+ */
+export async function deployTradeModuleSystem(
+  options: DeployOptions = {}
+): Promise<TradeModuleSystem> {
+  const opts = { ...DEFAULT_DEPLOY_OPTIONS, ...options };
+  const signers = await ethers.getSigners();
+  const owner = signers[0];
+  const users = signers.slice(1, 1 + (opts.userCount ?? 5));
+
+  // Deploy MockPaymentToken
+  const payment = (await (
+    await ethers.getContractFactory("MockPaymentToken")
+  ).deploy()) as MockPaymentToken;
+
+  // Deploy MockFeePolicy
+  const feePolicy = (await (
+    await ethers.getContractFactory("MockFeePolicy")
+  ).deploy(0)) as MockFeePolicy;
+
+  // Deploy SignalsPosition with UUPS proxy
+  const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
+  const positionImpl = await positionImplFactory.deploy();
+  await positionImpl.waitForDeployment();
+  const positionInit = positionImplFactory.interface.encodeFunctionData(
+    "initialize",
+    [owner.address]
+  );
+  const positionProxy = await (
+    await ethers.getContractFactory("TestERC1967Proxy")
+  ).deploy(positionImpl.target, positionInit);
+  const position = (await ethers.getContractAt(
+    "SignalsPosition",
+    await positionProxy.getAddress()
+  )) as SignalsPosition;
+
+  // Deploy LazyMulSegmentTree library
+  const lazyLib = await (
+    await ethers.getContractFactory("LazyMulSegmentTree")
+  ).deploy();
+
+  // Deploy TradeModule
+  const tradeModule = (await (
+    await ethers.getContractFactory("TradeModule", {
+      libraries: { LazyMulSegmentTree: lazyLib.target },
+    })
+  ).deploy()) as TradeModule;
+
+  // Deploy TradeModuleProxy (test harness)
+  const core = (await (
+    await ethers.getContractFactory("TradeModuleProxy", {
+      libraries: { LazyMulSegmentTree: lazyLib.target },
+    })
+  ).deploy(tradeModule.target)) as TradeModuleProxy;
+
+  // Configure addresses
+  await core.setAddresses(
+    payment.target,
+    await position.getAddress(),
+    opts.submitWindow ?? 300,
+    opts.settlementWindow ?? 60,
+    owner.address,
+    feePolicy.target
+  );
+
+  // Set up markets
+  const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+  const markets = opts.markets ?? [DEFAULT_MARKET_CONFIG];
+
+  for (let i = 0; i < markets.length; i++) {
+    const marketId = i + 1;
+    const config = markets[i];
+    const market: ISignalsCore.MarketStruct = {
+      isActive: true,
+      settled: false,
+      snapshotChunksDone: false,
+      numBins: config.numBins,
+      openPositionCount: 0,
+      snapshotChunkCursor: 0,
+      startTimestamp: now - 10,
+      endTimestamp: now + (config.endOffset ?? 10_000),
+      settlementTimestamp: now + (config.endOffset ?? 10_000),
+      minTick: config.minTick,
+      maxTick: config.maxTick,
+      tickSpacing: config.tickSpacing,
+      settlementTick: 0,
+      settlementValue: 0,
+      liquidityParameter: config.liquidityParameter ?? WAD,
+      feePolicy: ethers.ZeroAddress,
+    };
+    await core.setMarket(marketId, market);
+
+    // Seed tree with uniform distribution
+    const factors = Array.from({ length: config.numBins }, () => WAD);
+    await core.seedTree(marketId, factors);
+  }
+
+  // Connect position to core
+  await position.connect(owner).setCore(core.target);
+
+  // Fund users
+  const fundAmount = opts.fundAmount ?? ethers.parseUnits("100000", USDC_DECIMALS);
+  for (const user of users) {
+    await payment.transfer(user.address, fundAmount);
+    await payment.connect(user).approve(core.target, ethers.MaxUint256);
+  }
+
+  return {
+    owner,
+    users,
+    payment,
+    position,
+    feePolicy,
+    tradeModule,
+    core,
+  };
+}
+
+/**
+ * Deploy a minimal TradeModule system for simple tests.
+ * Single market, single user, minimal configuration.
+ */
+export async function deployMinimalTradeSystem(): Promise<TradeModuleSystem> {
+  return deployTradeModuleSystem({
+    markets: [{ numBins: 4, tickSpacing: 1, minTick: 0, maxTick: 4 }],
+    userCount: 1,
+  });
+}
+
+/**
+ * Deploy a multi-market TradeModule system for complex tests.
+ */
+export async function deployMultiMarketSystem(): Promise<TradeModuleSystem> {
+  return deployTradeModuleSystem({
+    markets: [
+      { numBins: 4, tickSpacing: 1, minTick: 0, maxTick: 4 },
+      { numBins: 4, tickSpacing: 1, minTick: -2, maxTick: 2 },
+    ],
+    userCount: 5,
+  });
+}
+
+/**
+ * Deploy a large-bin TradeModule system for stress tests.
+ */
+export async function deployLargeBinSystem(
+  numBins: number = 128
+): Promise<TradeModuleSystem> {
+  return deployTradeModuleSystem({
+    markets: [{ numBins, tickSpacing: 1, minTick: 0, maxTick: numBins }],
+    userCount: 5,
+    fundAmount: ethers.parseUnits("1000000", USDC_DECIMALS),
+  });
+}
+
+// ============================================================
+// Harness Deployment Functions
+// ============================================================
 
 /**
  * Deploy FixedPointMathTest harness

@@ -42,7 +42,7 @@ contract VaultAccountingLibTest {
         uint256 shares,
         uint256 price,
         uint256 depositAmount
-    ) external pure returns (uint256 newNav, uint256 newShares, uint256 mintedShares) {
+    ) external pure returns (uint256 newNav, uint256 newShares, uint256 mintedShares, uint256 refundAmount) {
         return VaultAccountingLib.applyDeposit(nav, shares, price, depositAmount);
     }
 

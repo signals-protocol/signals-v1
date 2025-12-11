@@ -1,96 +1,15 @@
-import { ethers } from "hardhat";
 import { expect } from "chai";
-import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import {
-  MockPaymentToken,
-  TradeModuleProxy,
-  TradeModule,
-  SignalsPosition,
-  TestERC1967Proxy,
-} from "../../../typechain-types";
-import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleProxy";
-import { WAD } from "../../helpers/constants";
-
-interface System {
-  users: HardhatEthersSigner[];
-  payment: MockPaymentToken;
-  core: TradeModuleProxy;
-  tradeModule: TradeModule;
-  position: SignalsPosition;
-}
-
-async function deploySystem(): Promise<System> {
-  const [owner, ...users] = await ethers.getSigners();
-  const payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
-  const feePolicy = await (await ethers.getContractFactory("MockFeePolicy")).deploy(0);
-  const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
-  const positionImpl = await positionImplFactory.deploy();
-  await positionImpl.waitForDeployment();
-  const initData = positionImplFactory.interface.encodeFunctionData("initialize", [owner.address]);
-  const positionProxy = (await (
-    await ethers.getContractFactory("TestERC1967Proxy")
-  ).deploy(await positionImpl.getAddress(), initData)) as TestERC1967Proxy;
-  const position = (await ethers.getContractAt(
-    "SignalsPosition",
-    await positionProxy.getAddress()
-  )) as SignalsPosition;
-
-  const lazy = await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy();
-  const tradeModule = await (
-    await ethers.getContractFactory("TradeModule", { libraries: { LazyMulSegmentTree: lazy.target } })
-  ).deploy();
-  const core = await (
-    await ethers.getContractFactory("TradeModuleProxy", { libraries: { LazyMulSegmentTree: lazy.target } })
-  ).deploy(tradeModule.target);
-
-  await core.setAddresses(
-    payment.target,
-    await position.getAddress(),
-    300,
-    60,
-    owner.address,
-    feePolicy.target
-  );
-
-  const now = (await ethers.provider.getBlock("latest"))!.timestamp;
-  const marketA: ISignalsCore.MarketStruct = {
-    isActive: true,
-    settled: false,
-    snapshotChunksDone: false,
-    numBins: 4,
-    openPositionCount: 0,
-    snapshotChunkCursor: 0,
-    startTimestamp: now - 10,
-    endTimestamp: now + 10_000,
-    settlementTimestamp: now + 10_000,
-    minTick: 0,
-    maxTick: 4,
-    tickSpacing: 1,
-    settlementTick: 0,
-    settlementValue: 0,
-    liquidityParameter: WAD,
-    feePolicy: ethers.ZeroAddress,
-  };
-  const marketB = { ...marketA, minTick: -2, maxTick: 2 };
-  await core.setMarket(1, marketA);
-  await core.setMarket(2, marketB);
-  await core.seedTree(1, [WAD, WAD, WAD, WAD]);
-  await core.seedTree(2, [WAD, WAD, WAD, WAD]);
-  await position.connect(owner).setCore(core.target);
-
-  // fund users
-  for (const u of users) {
-    await payment.transfer(u.address, 20_000_000n);
-    await payment.connect(u).approve(core.target, ethers.MaxUint256);
-  }
-
-  return { users, payment: payment as MockPaymentToken, core: core as TradeModuleProxy, tradeModule: tradeModule as TradeModule, position };
-}
+import { deployMultiMarketSystem } from "../../helpers/deploy";
 
 describe("TradeModule randomized multi-market flows", () => {
   it("maintains openPositionCount and position existence across random ops", async () => {
-    const sys = await deploySystem();
-    const { users, core, payment } = sys;
+    const { users, core, payment } = await deployMultiMarketSystem();
+    
+    // Fund users with smaller amounts for this test
+    for (const u of users) {
+      await payment.transfer(u.address, 20_000_000n);
+    }
+
     type Pos = { owner: number; market: number; qty: bigint; alive: boolean };
     const positions: Record<number, Pos> = {};
     let nextId = 1;

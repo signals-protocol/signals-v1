@@ -15,6 +15,19 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
  * - Deposit/withdraw request queue
  * - Daily batch processing
  * - NAV/shares/price updates per whitepaper Section 3
+ *
+ * Phase 4 Scope Notes:
+ * - Withdrawal lag (D_lag) is stored but NOT enforced in processBatch.
+ *   All pending withdrawals are processed immediately regardless of requestTimestamp.
+ *   This is intentional for Phase 4 testing. Phase 5 will add eligibility checks:
+ *   `block.timestamp >= requestTimestamp + withdrawLag`
+ * 
+ * - Deposit dust refund: Per whitepaper C.1(b1), A_used = S_mint * P is added to NAV,
+ *   and A - A_used is refunded. In Phase 4, per-user refund tracking is not implemented;
+ *   dust accumulates in the contract. Phase 5 will add individual request IDs and refunds.
+ *
+ * - NAV underflow: If P&L would make NAV negative, processBatch reverts with NAVUnderflow.
+ *   The Safety Layer (Phase 5) should prevent this via Backstop Grants (G_t).
  */
 contract LPVaultModule is SignalsCoreStorage {
     using SafeERC20 for IERC20;
@@ -47,9 +60,13 @@ contract LPVaultModule is SignalsCoreStorage {
     error VaultAlreadySeeded();
     error InsufficientSeedAmount(uint256 provided, uint256 required);
     error NoPendingRequest();
+    /// @dev Phase 5: Used in processBatch to enforce withdrawal lag (D_lag)
+    ///      `if (block.timestamp < req.requestTimestamp + withdrawLag) revert RequestLagNotMet(...)`
     error RequestLagNotMet(uint64 requestTime, uint64 requiredTime);
+    /// @dev Used in requestWithdraw to prevent DoS via excessive withdrawal requests
     error InsufficientShareBalance(uint256 requested, uint256 available);
     error ZeroAmount();
+    /// @dev Prevents duplicate batch processing in the same block
     error BatchAlreadyProcessed();
 
     // ============================================================
@@ -133,14 +150,24 @@ contract LPVaultModule is SignalsCoreStorage {
 
     /**
      * @notice Request a withdrawal from the vault
+     * @dev Phase 4: Validates total pending withdraws <= vault shares to prevent DoS.
+     *      Phase 5 will add per-user share balance validation via ERC-4626 token.
      * @param shares Number of shares to withdraw
      */
     function requestWithdraw(uint256 shares) external onlyDelegated {
         if (shares == 0) revert ZeroAmount();
         if (!lpVault.isSeeded) revert VaultNotSeeded();
 
-        // TODO: Check user share balance (requires LP share token integration)
-        // For now, just track the request
+        // Phase 4 DoS prevention: ensure total pending withdraws don't exceed vault shares
+        // This prevents attackers from requesting more shares than exist, which would
+        // cause processBatch to revert with InsufficientShares and block all batches.
+        // 
+        // Phase 5 TODO: Add per-user share balance check via ERC-4626 token:
+        // if (shareToken.balanceOf(msg.sender) < shares) revert InsufficientShareBalance(shares, shareToken.balanceOf(msg.sender));
+        uint256 newTotalPendingWithdraws = vaultQueue.pendingWithdraws + shares;
+        if (newTotalPendingWithdraws > lpVault.shares) {
+            revert InsufficientShareBalance(newTotalPendingWithdraws, lpVault.shares);
+        }
 
         VaultRequest storage req = userRequests[msg.sender];
         
@@ -148,7 +175,7 @@ contract LPVaultModule is SignalsCoreStorage {
             req.amount += shares;
         } else {
             if (req.isDeposit && req.amount > 0) {
-                revert NoPendingRequest(); // TODO: better error
+                revert NoPendingRequest(); // TODO: better error - PendingDepositExists
             }
             req.amount = shares;
             req.requestTimestamp = uint64(block.timestamp);
@@ -210,16 +237,28 @@ contract LPVaultModule is SignalsCoreStorage {
     /**
      * @notice Process daily batch
      * @dev Applies P&L, then processes withdrawals, then deposits
+     * 
+     *      IMPORTANT: This function resets all pending requests to prevent
+     *      cancel underflow bugs. After batch processing, userRequests[user].amount
+     *      is cleared via _clearProcessedRequests().
+     * 
      * @param pnl CLMSR P&L for the day (signed, WAD)
      * @param fees LP-attributed fees (WAD)
      * @param grant Backstop grant (WAD)
+     * @param processedUsers Array of users whose requests were processed
      */
     function processBatch(
         int256 pnl,
         uint256 fees,
-        uint256 grant
+        uint256 grant,
+        address[] calldata processedUsers
     ) external onlyDelegated {
         if (!lpVault.isSeeded) revert VaultNotSeeded();
+        
+        // Prevent duplicate batch in same block
+        if (lpVault.lastBatchTimestamp == uint64(block.timestamp)) {
+            revert BatchAlreadyProcessed();
+        }
 
         // Step 1: Compute pre-batch NAV and price
         VaultAccountingLib.PreBatchInputs memory inputs = VaultAccountingLib.PreBatchInputs({
@@ -247,24 +286,38 @@ contract LPVaultModule is SignalsCoreStorage {
         }
 
         // Step 3: Process deposits (at batch price)
+        // Per whitepaper C.1(b1): refund any deposit dust immediately
+        uint256 totalRefund = 0;
         if (vaultQueue.pendingDeposits > 0) {
-            (currentNav, currentShares, ) = VaultAccountingLib.applyDeposit(
+            uint256 refundAmount;
+            (currentNav, currentShares, , refundAmount) = VaultAccountingLib.applyDeposit(
                 currentNav,
                 currentShares,
                 preBatch.batchPrice,
                 vaultQueue.pendingDeposits
             );
+            totalRefund = refundAmount;
             vaultQueue.pendingDeposits = 0;
         }
+        
+        // Note: In Phase 4, per-user refund tracking is not implemented.
+        // The totalRefund amount stays in the contract and will be handled
+        // in Phase 5 when individual deposit requests are tracked with IDs.
+        // For now, this dust (at most 1 wei per deposit) accumulates in the contract.
 
-        // Step 4: Compute final state
+        // Step 4: Clear processed user requests to prevent cancel underflow
+        // This is critical: without this, users could call cancelDeposit() after
+        // their request was already processed, causing pendingDeposits underflow.
+        _clearProcessedRequests(processedUsers);
+
+        // Step 5: Compute final state
         VaultAccountingLib.PostBatchState memory postBatch = VaultAccountingLib.computePostBatchState(
             currentNav,
             currentShares,
             lpVault.pricePeak
         );
 
-        // Step 5: Update storage
+        // Step 6: Update storage
         lpVault.nav = postBatch.nav;
         lpVault.shares = postBatch.shares;
         lpVault.price = postBatch.price;
@@ -279,6 +332,23 @@ contract LPVaultModule is SignalsCoreStorage {
             postBatch.shares,
             postBatch.price
         );
+    }
+
+    /**
+     * @notice Clear processed user requests after batch
+     * @dev Prevents cancel underflow by resetting userRequests[user].amount to 0
+     *      for all users whose requests were processed in this batch.
+     * 
+     *      Phase 5 will replace this with request ID-based tracking.
+     * 
+     * @param users Array of user addresses whose requests were processed
+     */
+    function _clearProcessedRequests(address[] calldata users) internal {
+        for (uint256 i = 0; i < users.length; i++) {
+            VaultRequest storage req = userRequests[users[i]];
+            req.amount = 0;
+            req.requestTimestamp = 0;
+        }
     }
 
     // ============================================================

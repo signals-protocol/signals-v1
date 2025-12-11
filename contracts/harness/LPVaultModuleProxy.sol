@@ -58,11 +58,29 @@ contract LPVaultModuleProxy is SignalsCoreStorage {
     }
 
     function processBatch(int256 pnl, uint256 fees, uint256 grant) external {
+        // For backward compatibility, call with empty processedUsers array
+        address[] memory emptyUsers = new address[](0);
         _delegate(abi.encodeWithSelector(
             LPVaultModule.processBatch.selector,
             pnl,
             fees,
-            grant
+            grant,
+            emptyUsers
+        ));
+    }
+
+    function processBatchWithUsers(
+        int256 pnl,
+        uint256 fees,
+        uint256 grant,
+        address[] calldata processedUsers
+    ) external {
+        _delegate(abi.encodeWithSelector(
+            LPVaultModule.processBatch.selector,
+            pnl,
+            fees,
+            grant,
+            processedUsers
         ));
     }
 
