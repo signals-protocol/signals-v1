@@ -10,12 +10,17 @@ import {
   TestERC1967Proxy,
 } from "../../typechain-types";
 import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
-import { WAD, USDC_DECIMALS, SMALL_QUANTITY, MEDIUM_QUANTITY } from "../helpers/constants";
+import {
+  WAD,
+  USDC_DECIMALS,
+  SMALL_QUANTITY,
+  MEDIUM_QUANTITY,
+} from "../helpers/constants";
 import { approx, createPrng } from "../helpers/utils";
 
 /**
  * CLMSR Invariant Tests
- * 
+ *
  * Tests mathematical and system invariants that must hold for CLMSR correctness:
  * - Sum monotonicity (buy increases sum, sell decreases)
  * - Range isolation (only affected bins change)
@@ -45,7 +50,9 @@ describe("CLMSR Invariants", () => {
       await ethers.getContractFactory("MockPaymentToken")
     ).deploy();
 
-    const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
+    const positionImplFactory = await ethers.getContractFactory(
+      "SignalsPosition"
+    );
     const positionImpl = await positionImplFactory.deploy();
     await positionImpl.waitForDeployment();
     const positionInit = positionImplFactory.interface.encodeFunctionData(
@@ -122,11 +129,23 @@ describe("CLMSR Invariants", () => {
     await payment.connect(user).approve(core.target, fundAmount);
     await payment.connect(user2).approve(core.target, fundAmount);
 
-    return { owner, user, user2, payment, position, core, feePolicy, marketId: MARKET_ID };
+    return {
+      owner,
+      user,
+      user2,
+      payment,
+      position,
+      core,
+      feePolicy,
+      marketId: MARKET_ID,
+    };
   }
 
   // Helper to get total distribution sum
-  async function getTotalSum(core: TradeModuleProxy, marketId: number): Promise<bigint> {
+  async function getTotalSum(
+    core: TradeModuleProxy,
+    marketId: number
+  ): Promise<bigint> {
     return await core.getMarketTotalSum(marketId);
   }
 
@@ -135,7 +154,9 @@ describe("CLMSR Invariants", () => {
   // ============================================================
   describe("Sum Monotonicity", () => {
     it("INV-1: Buy increases total sum", async () => {
-      const { core, user, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       const sumBefore = await getTotalSum(core, marketId);
 
@@ -152,16 +173,20 @@ describe("CLMSR Invariants", () => {
     });
 
     it("INV-2: Sell decreases total sum", async () => {
-      const { core, user, position, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, position, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // First buy
-      await core.connect(user).openPosition(
-        marketId,
-        2,
-        5,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          2,
+          5,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       const sumBefore = await getTotalSum(core, marketId);
 
@@ -175,7 +200,9 @@ describe("CLMSR Invariants", () => {
     });
 
     it("INV-3: Multiple buys monotonically increase sum", async () => {
-      const { core, user, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       let prevSum = await getTotalSum(core, marketId);
 
@@ -200,7 +227,9 @@ describe("CLMSR Invariants", () => {
   // ============================================================
   describe("Range Isolation", () => {
     it("INV-4: Buy only affects bins in range", async () => {
-      const { core, user, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // Record all bin values before
       const binsBefore: bigint[] = [];
@@ -209,13 +238,15 @@ describe("CLMSR Invariants", () => {
       }
 
       // Buy range [3, 6)
-      await core.connect(user).openPosition(
-        marketId,
-        3,
-        6,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          3,
+          6,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       // Check bins
       for (let i = 0; i < NUM_BINS; i++) {
@@ -231,27 +262,33 @@ describe("CLMSR Invariants", () => {
     });
 
     it("INV-5: Overlapping ranges compound correctly", async () => {
-      const { core, user, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // First buy [2, 5)
-      await core.connect(user).openPosition(
-        marketId,
-        2,
-        5,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          2,
+          5,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       const bin3After1 = await core.getMarketBinFactor(marketId, 3);
 
       // Second buy [3, 7) - overlaps at [3, 5)
-      await core.connect(user).openPosition(
-        marketId,
-        3,
-        7,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          3,
+          7,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       const bin3After2 = await core.getMarketBinFactor(marketId, 3);
 
@@ -273,7 +310,12 @@ describe("CLMSR Invariants", () => {
       // Z_R = WAD (one bin), Z_R̄ = (n-1)*WAD
       // λ_R = 1/n (uniform probability)
       // Cost = α * ln(1 - λ + e^{x/α} * λ)
-      const cost = await core.calculateOpenCost.staticCall(marketId, 4, 5, SMALL_QUANTITY);
+      const cost = await core.calculateOpenCost.staticCall(
+        marketId,
+        4,
+        5,
+        SMALL_QUANTITY
+      );
 
       // Cost should be positive and follow CLMSR formula
       expect(cost).to.be.gt(0n);
@@ -285,7 +327,10 @@ describe("CLMSR Invariants", () => {
       // When R = all bins, λ_R = 1
       // Cost = α * ln(e^{x/α}) = x (linear)
       const fullRangeCost = await core.calculateOpenCost.staticCall(
-        marketId, 0, NUM_BINS, SMALL_QUANTITY
+        marketId,
+        0,
+        NUM_BINS,
+        SMALL_QUANTITY
       );
 
       // Full range cost should be approximately equal to quantity
@@ -298,9 +343,24 @@ describe("CLMSR Invariants", () => {
 
       // Cost of [0,5) + cost of [5,10) ≠ cost of [0,10)
       // Because CLMSR is not additive (it's based on partition function)
-      const costA = await core.calculateOpenCost.staticCall(marketId, 0, 5, SMALL_QUANTITY);
-      const costB = await core.calculateOpenCost.staticCall(marketId, 5, NUM_BINS, SMALL_QUANTITY);
-      const costFull = await core.calculateOpenCost.staticCall(marketId, 0, NUM_BINS, SMALL_QUANTITY);
+      const costA = await core.calculateOpenCost.staticCall(
+        marketId,
+        0,
+        5,
+        SMALL_QUANTITY
+      );
+      const costB = await core.calculateOpenCost.staticCall(
+        marketId,
+        5,
+        NUM_BINS,
+        SMALL_QUANTITY
+      );
+      const costFull = await core.calculateOpenCost.staticCall(
+        marketId,
+        0,
+        NUM_BINS,
+        SMALL_QUANTITY
+      );
 
       // Sum of parts ≠ whole (due to normalization)
       expect(costA + costB).to.not.equal(costFull);
@@ -312,18 +372,22 @@ describe("CLMSR Invariants", () => {
   // ============================================================
   describe("Cost/Proceeds Symmetry", () => {
     it("INV-6: Roundtrip approximately restores distribution", async () => {
-      const { core, user, position, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, position, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       const sumBefore = await getTotalSum(core, marketId);
 
       // Buy
-      await core.connect(user).openPosition(
-        marketId,
-        2,
-        5,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          2,
+          5,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       // Immediately sell
       const positions = await position.getPositionsByOwner(user.address);
@@ -333,8 +397,9 @@ describe("CLMSR Invariants", () => {
 
       // Sum should be approximately restored (within rounding tolerance)
       // CLMSR is path-independent, so buy+sell should restore state
-      const diff = sumAfter > sumBefore ? sumAfter - sumBefore : sumBefore - sumAfter;
-      
+      const diff =
+        sumAfter > sumBefore ? sumAfter - sumBefore : sumBefore - sumAfter;
+
       // Mathematical justification for tolerance:
       // Measured actual error: ~3 wei for single roundtrip
       // Each wMul/wDiv operation contributes ±1 wei rounding error
@@ -366,16 +431,20 @@ describe("CLMSR Invariants", () => {
     });
 
     it("INV-8: Proceeds increase with quantity", async () => {
-      const { core, user, position, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, position, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // Open position first
-      await core.connect(user).openPosition(
-        marketId,
-        2,
-        5,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          2,
+          5,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       const positions = await position.getPositionsByOwner(user.address);
       const positionId = positions[0];
@@ -400,10 +469,16 @@ describe("CLMSR Invariants", () => {
   // ============================================================
   describe("Path Independence", () => {
     it("INV-PI-1: Same start/end state yields same cost regardless of path", async () => {
-      const { core, user, position, marketId, owner, payment, feePolicy } = await loadFixture(deployInvariantFixture);
+      const { core, user, position, marketId, owner, payment, feePolicy } =
+        await loadFixture(deployInvariantFixture);
 
       // Path 1: Direct buy [2,5) with quantity Q
-      const directCost = await core.calculateOpenCost.staticCall(marketId, 2, 5, MEDIUM_QUANTITY);
+      const directCost = await core.calculateOpenCost.staticCall(
+        marketId,
+        2,
+        5,
+        MEDIUM_QUANTITY
+      );
 
       // Create fresh market for path 2
       const now = (await ethers.provider.getBlock("latest"))!.timestamp;
@@ -431,9 +506,17 @@ describe("CLMSR Invariants", () => {
       // Path 2: Two half-size buys on same range
       const halfQty = MEDIUM_QUANTITY / 2n;
       const cost1 = await core.calculateOpenCost.staticCall(2, 2, 5, halfQty);
-      
+
       // After first buy, calculate second buy cost
-      await core.connect(user).openPosition(2, 2, 5, halfQty, ethers.parseUnits("100", USDC_DECIMALS));
+      await core
+        .connect(user)
+        .openPosition(
+          2,
+          2,
+          5,
+          halfQty,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
       const cost2 = await core.calculateOpenCost.staticCall(2, 2, 5, halfQty);
 
       const pathCost = cost1 + cost2;
@@ -446,11 +529,23 @@ describe("CLMSR Invariants", () => {
     });
 
     it("INV-PI-2: Order of independent range trades doesn't affect total cost", async () => {
-      const { core, user, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // Calculate costs for two non-overlapping ranges
-      const costA_first = await core.calculateOpenCost.staticCall(marketId, 0, 2, SMALL_QUANTITY);
-      const costB_first = await core.calculateOpenCost.staticCall(marketId, 5, 8, SMALL_QUANTITY);
+      const costA_first = await core.calculateOpenCost.staticCall(
+        marketId,
+        0,
+        2,
+        SMALL_QUANTITY
+      );
+      const costB_first = await core.calculateOpenCost.staticCall(
+        marketId,
+        5,
+        8,
+        SMALL_QUANTITY
+      );
 
       // Since ranges don't overlap, order shouldn't matter for individual costs
       // Each range's cost depends only on that range's probability mass
@@ -458,8 +553,21 @@ describe("CLMSR Invariants", () => {
       expect(costB_first).to.be.gt(0n);
 
       // Execute A first, then B
-      await core.connect(user).openPosition(marketId, 0, 2, SMALL_QUANTITY, ethers.parseUnits("50", USDC_DECIMALS));
-      const costB_afterA = await core.calculateOpenCost.staticCall(marketId, 5, 8, SMALL_QUANTITY);
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          0,
+          2,
+          SMALL_QUANTITY,
+          ethers.parseUnits("50", USDC_DECIMALS)
+        );
+      const costB_afterA = await core.calculateOpenCost.staticCall(
+        marketId,
+        5,
+        8,
+        SMALL_QUANTITY
+      );
 
       // B's cost should be affected by A's trade (Z increased)
       // but the effect is symmetric if we had done B first
@@ -485,30 +593,46 @@ describe("CLMSR Invariants", () => {
       // The initial cost C(0) for uniform prior = α * ln(n)
       // This represents the "potential" that can be lost
       const initialSum = await getTotalSum(core, marketId);
-      
+
       // Initial sum should be n * WAD (uniform)
       expect(initialSum).to.equal(n * WAD);
 
       // Any single trade cost should be less than max loss
       const largeBuyCost = await core.calculateOpenCost.staticCall(
-        marketId, 0, 1, ethers.parseUnits("100", 6) // Large quantity
+        marketId,
+        0,
+        1,
+        ethers.parseUnits("100", 6) // Large quantity
       );
-      
+
       // Cost is always positive (buyer pays)
       expect(largeBuyCost).to.be.gt(0n);
     });
 
     it("INV-LB-2: Cost increases but stays bounded as mass concentrates", async () => {
-      const { core, user, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // Concentrate mass on single bin through repeated buys
       const costs: bigint[] = [];
       for (let i = 0; i < 5; i++) {
-        const cost = await core.calculateOpenCost.staticCall(marketId, 4, 5, MEDIUM_QUANTITY);
-        costs.push(cost);
-        await core.connect(user).openPosition(
-          marketId, 4, 5, MEDIUM_QUANTITY, ethers.parseUnits("100", USDC_DECIMALS)
+        const cost = await core.calculateOpenCost.staticCall(
+          marketId,
+          4,
+          5,
+          MEDIUM_QUANTITY
         );
+        costs.push(cost);
+        await core
+          .connect(user)
+          .openPosition(
+            marketId,
+            4,
+            5,
+            MEDIUM_QUANTITY,
+            ethers.parseUnits("100", USDC_DECIMALS)
+          );
       }
 
       // Each subsequent buy should cost more (mass concentrating)
@@ -523,7 +647,9 @@ describe("CLMSR Invariants", () => {
   // ============================================================
   describe("Stress Invariants", () => {
     it("INV-10: Sum remains consistent under many operations", async () => {
-      const { core, user, user2, position, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, user2, position, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       const prng = createPrng(42n);
 
@@ -532,13 +658,15 @@ describe("CLMSR Invariants", () => {
         const lo = prng.nextInt(NUM_BINS - 1);
         const hi = lo + 1 + prng.nextInt(NUM_BINS - 1 - lo);
 
-        await core.connect(user).openPosition(
-          marketId,
-          lo,
-          hi,
-          SMALL_QUANTITY,
-          ethers.parseUnits("50", USDC_DECIMALS)
-        );
+        await core
+          .connect(user)
+          .openPosition(
+            marketId,
+            lo,
+            hi,
+            SMALL_QUANTITY,
+            ethers.parseUnits("50", USDC_DECIMALS)
+          );
       }
 
       // Verify sum is still valid
@@ -553,25 +681,31 @@ describe("CLMSR Invariants", () => {
     });
 
     it("INV-11: Multiple users maintain system consistency", async () => {
-      const { core, user, user2, position, marketId } = await loadFixture(deployInvariantFixture);
+      const { core, user, user2, position, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // User 1 buys
-      await core.connect(user).openPosition(
-        marketId,
-        2,
-        4,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user)
+        .openPosition(
+          marketId,
+          2,
+          4,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       // User 2 buys different range
-      await core.connect(user2).openPosition(
-        marketId,
-        5,
-        8,
-        MEDIUM_QUANTITY,
-        ethers.parseUnits("100", USDC_DECIMALS)
-      );
+      await core
+        .connect(user2)
+        .openPosition(
+          marketId,
+          5,
+          8,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
 
       // Both close
       const pos1 = await position.getPositionsByOwner(user.address);
@@ -584,8 +718,9 @@ describe("CLMSR Invariants", () => {
       const finalSum = await getTotalSum(core, marketId);
       const initialSum = BigInt(NUM_BINS) * WAD;
 
-      const diff = finalSum > initialSum ? finalSum - initialSum : initialSum - finalSum;
-      
+      const diff =
+        finalSum > initialSum ? finalSum - initialSum : initialSum - finalSum;
+
       // Mathematical justification:
       // Measured actual error: ~5 wei for 2-user scenario
       // 2 users x 2 operations = 4 roundtrips
@@ -597,4 +732,3 @@ describe("CLMSR Invariants", () => {
     });
   });
 });
-
