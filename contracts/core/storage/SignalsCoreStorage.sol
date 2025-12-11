@@ -88,6 +88,109 @@ abstract contract SignalsCoreStorage {
     uint256 public feeRatioBackstop; // ϕ_BS
     uint256 public feeRatioTreasury; // ϕ_TR
 
+    // ============================================================
+    // Phase 5: Fee Waterfall & Capital Stack
+    // ============================================================
+
+    /// @notice Capital stack configuration (Backstop + Treasury)
+    struct CapitalStackState {
+        uint256 backstopNav;     // B_t: Backstop NAV (WAD)
+        uint256 treasuryNav;     // T_t: Treasury NAV (WAD)
+    }
+
+    /// @notice Fee waterfall configuration parameters
+    struct FeeWaterfallConfig {
+        int256 pdd;              // Drawdown floor (negative WAD, e.g., -0.3e18 = -30%)
+        uint256 rhoBS;           // ρ_BS: Backstop coverage target ratio (WAD)
+        uint256 phiLP;           // ϕ_LP: LP residual fee share (WAD)
+        uint256 phiBS;           // ϕ_BS: Backstop residual fee share (WAD)
+        uint256 phiTR;           // ϕ_TR: Treasury residual fee share (WAD)
+    }
+
+    /// @notice Daily P&L snapshot for batch processing
+    /// @dev Fields match whitepaper Appendix A naming for easy verification
+    struct DailyPnlSnapshot {
+        // Input values
+        int256 Lt;               // CLMSR P&L (signed)
+        uint256 Ftot;            // Total gross fees
+        
+        // Fee Waterfall intermediate values
+        uint256 Floss;           // Loss compensation: min(Ftot, |L^-|)
+        uint256 Fpool;           // Remaining pool: Ftot - Floss
+        uint256 Nraw;            // NAV after loss comp: N_{t-1} + Lt + Floss
+        uint256 Gt;              // Grant from Backstop
+        uint256 Ffill;           // Backstop coverage fill
+        
+        // Fee splits
+        uint256 FLP;             // Fee to LP: Floss + F_core_LP + dust
+        uint256 FBS;             // Fee to Backstop: F_fill + F_core_BS
+        uint256 FTR;             // Fee to Treasury: F_core_TR
+        uint256 Fdust;           // Rounding dust (to LP)
+        
+        // Output values
+        uint256 Ft;              // Total fee credited to LP NAV
+        uint256 Npre;            // Pre-batch NAV
+        uint256 Pe;              // Batch equity price: Npre / S_{t-1}
+        
+        // State
+        bool processed;          // Whether this batch has been processed
+    }
+
+    /// @notice Unified capital stack state (Phase 5)
+    CapitalStackState internal capitalStack;
+
+    /// @notice Fee waterfall configuration (Phase 5)
+    FeeWaterfallConfig internal feeWaterfallConfig;
+
+    /// @notice Daily P&L snapshots by batch ID
+    mapping(uint64 => DailyPnlSnapshot) internal _dailyPnl;
+
+    // ============================================================
+    // Phase 6: Request ID-based Queue (Placeholder)
+    // ============================================================
+
+    /// @notice Request status enum for ID-based queue (Phase 6)
+    enum RequestStatus {
+        Pending,
+        Processed,
+        Claimed,
+        Cancelled
+    }
+
+    /// @notice Deposit request with ID (Phase 6)
+    struct DepositRequest {
+        uint64 id;
+        address owner;
+        uint256 amount;
+        uint64 eligibleBatchId;
+        RequestStatus status;
+    }
+
+    /// @notice Withdraw request with ID (Phase 6)
+    struct WithdrawRequest {
+        uint64 id;
+        address owner;
+        uint256 shares;
+        uint64 eligibleBatchId;
+        RequestStatus status;
+    }
+
+    /// @notice Batch aggregation result (Phase 6)
+    struct BatchAggregation {
+        uint256 totalDepositAssets;
+        uint256 totalWithdrawShares;
+        uint256 depositPrice;
+        uint256 withdrawPrice;
+        bool processed;
+    }
+
+    // Phase 6 storage slots (not used until Phase 6)
+    // mapping(uint64 => DepositRequest) internal depositRequests;
+    // mapping(uint64 => WithdrawRequest) internal withdrawRequests;
+    // mapping(uint64 => BatchAggregation) internal batchAggregations;
+    // uint64 public nextDepositRequestId;
+    // uint64 public nextWithdrawRequestId;
+
     // Reserve ample slots for future upgrades; do not change after first deployment.
-    uint256[35] internal __gap;
+    uint256[25] internal __gap;
 }
