@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { WAD } from "../../helpers/constants";
 
 /**
  * VaultAccountingLib Unit Tests (Phase 4-0 Skeleton)
@@ -17,8 +18,6 @@ import { ethers } from "hardhat";
  * - INV-V7: Peak monotonicity
  * - INV-V8: Drawdown range
  */
-
-const WAD = ethers.parseEther("1");
 
 describe("VaultAccountingLib", () => {
   // ============================================================

@@ -56,14 +56,12 @@ const sdk = require("../../signals-v0/clmsr-sdk/dist") as {
 };
 const { CLMSRSDK, mapMarket, mapDistribution, MathUtils, toWAD } = sdk;
 
-const WAD = ethers.parseEther("1");
+import { WAD } from "../helpers/constants";
+import { toBN } from "../helpers/utils";
+
 // FixedPointMathU exp/ln는 1e-8 근처 오차가 있을 수 있으므로 여유 있게 허용
 const TOLERANCE = ethers.parseEther("0.00000003"); // 3e-8 WAD tolerance
 const SAFE_EXP_TOLERANCE = ethers.parseEther("0.000001"); // safeExp parity 허용 오차(1e-6)
-
-function toBN(value: BigNumberish) {
-  return BigInt(value.toString());
-}
 
 function approx(
   actual: BigNumberish,

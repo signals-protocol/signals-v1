@@ -10,8 +10,7 @@ import {
   TestERC1967Proxy,
 } from "../../typechain-types";
 import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
-
-const WAD = ethers.parseEther("1");
+import { WAD } from "../helpers/constants";
 
 interface System {
   users: HardhatEthersSigner[];

@@ -128,4 +128,9 @@ contract TradeModuleProxy is SignalsCoreStorage {
         if (tree.size == 0) return 0;
         return tree.getRangeSum(0, tree.size - 1);
     }
+
+    /// @notice Retrieve market struct for testing
+    function harnessGetMarket(uint256 marketId) external view returns (ISignalsCore.Market memory) {
+        return markets[marketId];
+    }
 }

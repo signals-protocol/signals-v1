@@ -11,9 +11,8 @@ import {
   OracleModule,
   TestERC1967Proxy,
   LazyMulSegmentTree,
-} from "../../typechain-types";
-
-const WAD = ethers.parseEther("1");
+} from "../../../typechain-types";
+import { WAD } from "../../helpers/constants";
 
 async function deploySystem() {
   const [owner, u1, u2, u3, oracleSigner] = await ethers.getSigners();

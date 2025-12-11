@@ -7,8 +7,8 @@ import {
   MockSignalsPosition,
   OracleModule,
   SignalsCoreHarness,
-} from "../../typechain-types";
-import { ISignalsCore } from "../../typechain-types/contracts/core/SignalsCore";
+} from "../../../typechain-types";
+import { ISignalsCore } from "../../../typechain-types/contracts/core/SignalsCore";
 
 const abiCoder = ethers.AbiCoder.defaultAbiCoder();
 

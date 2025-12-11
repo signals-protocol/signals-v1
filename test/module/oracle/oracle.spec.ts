@@ -7,8 +7,8 @@ import {
   MockSignalsPosition,
   OracleModule,
   SignalsCoreHarness,
-} from "../../typechain-types";
-import { ISignalsCore } from "../../typechain-types/contracts/core/SignalsCore";
+} from "../../../typechain-types";
+import { ISignalsCore } from "../../../typechain-types/contracts/core/SignalsCore";
 
 const abiCoder = ethers.AbiCoder.defaultAbiCoder();
 
@@ -159,4 +159,15 @@ describe("OracleModule", () => {
       "SettlementOracleCandidateMissing"
     );
   });
+
+  // NOTE: toTick clamping tests (§6.2) are NOT added here because:
+  // 1. OracleModule.toTick() conversion logic is NOT yet implemented
+  // 2. These tests would fail now and only pass after Phase 5 (Settlement) implementation
+  // 3. Per user's instruction: "Phase 4-6 구현하면 깨질 테스트들 추가하지 말라"
+  // 
+  // When implementing Phase 5, add tests for:
+  // - Price at L → tick 0
+  // - Price below L → clamped to tick 0  
+  // - Price at/above U → clamped to tick n-1
+  // - Tick boundary floor division
 });

@@ -7,10 +7,9 @@ import {
   TradeModule,
   SignalsPosition,
   TestERC1967Proxy,
-} from "../../typechain-types";
-import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
-
-const WAD = ethers.parseEther("1");
+} from "../../../typechain-types";
+import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleProxy";
+import { WAD } from "../../helpers/constants";
 
 async function deploySystem(numBins: number, spacing: number, endOffset = 10_000) {
   const [owner, ...users] = await ethers.getSigners();

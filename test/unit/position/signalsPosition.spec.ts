@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
-import { SignalsPosition, TestERC1967Proxy } from "../../typechain-types";
+import { SignalsPosition, TestERC1967Proxy } from "../../../typechain-types";
 
 async function deployPosition(initialCore: string): Promise<SignalsPosition> {
   const implFactory = await ethers.getContractFactory("SignalsPosition");

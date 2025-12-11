@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { WAD, ONE_DAY } from "../../helpers/constants";
 
 /**
  * VaultBatchFlow Integration Tests (Phase 4-0 Skeleton)
@@ -11,8 +12,7 @@ import { ethers } from "hardhat";
  * - INV-V1 ~ INV-V13 (all Vault invariants in integration context)
  */
 
-const WAD = ethers.parseEther("1");
-const DAY = 86400;
+const DAY = ONE_DAY;
 
 describe("VaultBatchFlow Integration", () => {
   // ============================================================

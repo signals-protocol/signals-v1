@@ -8,10 +8,9 @@ import {
   TradeModule,
   SignalsPosition,
   TestERC1967Proxy,
-} from "../../typechain-types";
-import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
-
-const WAD = ethers.parseEther("1");
+} from "../../../typechain-types";
+import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleProxy";
+import { WAD } from "../../helpers/constants";
 
 interface DeployedSystem {
   owner: HardhatEthersSigner;

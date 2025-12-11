@@ -112,4 +112,4 @@ complete_codebase-v0.md
 plan.md
 scripts/generate_codebase.sh
 test/fixtures/clmsrFixtures.json
-whitepaper.pdf
+whitepaper.tex

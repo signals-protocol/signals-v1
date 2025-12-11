@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { WAD, ONE_DAY } from "../../helpers/constants";
 
 /**
  * VaultQueue Unit Tests (Phase 4-0 Skeleton)
@@ -13,8 +14,7 @@ import { ethers } from "hardhat";
  * - INV-V11: Queue balance consistency
  */
 
-const WAD = ethers.parseEther("1");
-const DAY = 86400;
+const DAY = ONE_DAY;
 
 describe("VaultQueue", () => {
   // ============================================================

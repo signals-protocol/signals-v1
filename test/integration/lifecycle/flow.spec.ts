@@ -9,7 +9,7 @@ import {
   SignalsCore,
   SignalsPosition,
   TestERC1967Proxy,
-} from "../../typechain-types";
+} from "../../../typechain-types";
 
 const abiCoder = ethers.AbiCoder.defaultAbiCoder();
 
