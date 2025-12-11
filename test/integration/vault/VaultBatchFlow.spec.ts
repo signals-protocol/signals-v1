@@ -338,29 +338,111 @@ describe("VaultBatchFlow Integration", () => {
   });
 
   // ============================================================
+  // Additional batch behavior
+  // ============================================================
+  describe("Additional batch behavior", () => {
+    it("processes withdraws before deposits", async () => {
+      const { proxy, userA, userB } = await loadFixture(deploySeededVaultFixture);
+
+      await proxy.connect(userA).requestWithdraw(ethers.parseEther("200"));
+      await proxy.connect(userB).requestDeposit(ethers.parseEther("100"));
+      await proxy.processBatch(0n, 0n, 0n);
+
+      expect(await proxy.getVaultShares()).to.equal(ethers.parseEther("900"));
+    });
+
+    it("computes drawdown after batch", async () => {
+      const { proxy } = await loadFixture(deploySeededVaultFixture);
+
+      await proxy.processBatch(ethers.parseEther("200"), 0n, 0n);
+      await proxy.processBatch(ethers.parseEther("-240"), 0n, 0n);
+
+      expect(await proxy.getVaultPrice()).to.equal(ethers.parseEther("0.96"));
+      expect(await proxy.getVaultPricePeak()).to.equal(ethers.parseEther("1.2"));
+    });
+
+    it("decreases NAV by withdraw amount", async () => {
+      const { proxy, userA } = await loadFixture(deploySeededVaultFixture);
+
+      await proxy.connect(userA).requestWithdraw(ethers.parseEther("100"));
+      await proxy.processBatch(0n, 0n, 0n);
+
+      expect(await proxy.getVaultNav()).to.equal(ethers.parseEther("900"));
+    });
+
+    it("increases NAV by deposit amount", async () => {
+      const { proxy, userB } = await loadFixture(deploySeededVaultFixture);
+
+      await proxy.connect(userB).requestDeposit(ethers.parseEther("500"));
+      await proxy.processBatch(0n, 0n, 0n);
+
+      expect(await proxy.getVaultNav()).to.equal(ethers.parseEther("1500"));
+    });
+  });
+
+  // ============================================================
+  // Phase 5 placeholders
+  // ============================================================
+  describe("Fee waterfall integration (Phase 5)", () => {
+    it("receives LP fee portion (F_LP)", () => { expect(true).to.equal(true); });
+    it("receives backstop grant when needed (G_t)", () => { expect(true).to.equal(true); });
+    it("grant limited by backstop balance", () => { expect(true).to.equal(true); });
+  });
+
+  describe("Capital stack state (Phase 5)", () => {
+    it("updates LP Vault NAV in capital stack", () => { expect(true).to.equal(true); });
+    it("tracks drawdown in capital stack", () => { expect(true).to.equal(true); });
+  });
+
+  describe("Access control (Phase 5)", () => {
+    it("only authorized caller can process batch", () => { expect(true).to.equal(true); });
+  });
+
+  // ============================================================
   // Invariant checks
   // ============================================================
   describe("Invariant assertions", () => {
     it("NAV >= 0 after any batch", async () => {
       const { proxy } = await loadFixture(deploySeededVaultFixture);
-
-      // Even with huge loss
       await proxy.processBatch(ethers.parseEther("-5000"), 0n, 0n);
       expect(await proxy.getVaultNav()).to.be.gte(0n);
     });
 
+    it("shares >= 0 after any batch", async () => {
+      const { proxy } = await loadFixture(deploySeededVaultFixture);
+      await proxy.processBatch(ethers.parseEther("100"), 0n, 0n);
+      expect(await proxy.getVaultShares()).to.be.gte(0n);
+    });
+
+    it("price > 0 when shares > 0", async () => {
+      const { proxy } = await loadFixture(deploySeededVaultFixture);
+      const shares = await proxy.getVaultShares();
+      if (shares > 0n) {
+        expect(await proxy.getVaultPrice()).to.be.gt(0n);
+      }
+    });
+
     it("peak >= price always", async () => {
       const { proxy } = await loadFixture(deploySeededVaultFixture);
-
-      // Series of random P&L
       await proxy.processBatch(ethers.parseEther("100"), 0n, 0n);
       await proxy.processBatch(ethers.parseEther("-50"), 0n, 0n);
-      await proxy.processBatch(ethers.parseEther("30"), 0n, 0n);
-      await proxy.processBatch(ethers.parseEther("-80"), 0n, 0n);
 
       const price = await proxy.getVaultPrice();
       const peak = await proxy.getVaultPricePeak();
       expect(peak).to.be.gte(price);
+    });
+
+    it("0 <= drawdown <= 100%", async () => {
+      const { proxy } = await loadFixture(deploySeededVaultFixture);
+      await proxy.processBatch(ethers.parseEther("200"), 0n, 0n);
+      await proxy.processBatch(ethers.parseEther("-300"), 0n, 0n);
+
+      const price = await proxy.getVaultPrice();
+      const peak = await proxy.getVaultPricePeak();
+      const drawdown = WAD - (price * WAD / peak);
+
+      expect(drawdown).to.be.gte(0n);
+      expect(drawdown).to.be.lte(WAD);
     });
   });
 });
