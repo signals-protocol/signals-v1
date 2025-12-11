@@ -198,7 +198,7 @@ describe("MarketLifecycleModule", () => {
     expect(market.snapshotChunkCursor).to.equal(0);
     expect(market.snapshotChunksDone).to.equal(false);
 
-    await expect(core.getSettlementPrice(1, 0)).to.be.revertedWithCustomError(
+    await expect(core.getSettlementPrice(1)).to.be.revertedWithCustomError(
       oracleModule,
       "SettlementOracleCandidateMissing"
     );

@@ -48,7 +48,8 @@ contract LPVaultModule is SignalsCoreStorage {
         uint256 batchPrice,
         uint256 navPost,
         uint256 sharesPost,
-        uint256 pricePost
+        uint256 pricePost,
+        uint256 totalDepositRefund  // dust accumulated in contract
     );
     event VaultSeeded(address indexed seeder, uint256 amount, uint256 shares);
 
@@ -59,7 +60,11 @@ contract LPVaultModule is SignalsCoreStorage {
     error VaultNotSeeded();
     error VaultAlreadySeeded();
     error InsufficientSeedAmount(uint256 provided, uint256 required);
-    error NoPendingRequest();
+    /// @dev Specific pending request errors for better debugging
+    error PendingDepositExists(address user, uint256 amount);
+    error PendingWithdrawExists(address user, uint256 shares);
+    error NoPendingDeposit(address user);
+    error NoPendingWithdraw(address user);
     /// @dev Phase 5: Used in processBatch to enforce withdrawal lag (D_lag)
     ///      `if (block.timestamp < req.requestTimestamp + withdrawLag) revert RequestLagNotMet(...)`
     error RequestLagNotMet(uint64 requestTime, uint64 requiredTime);
@@ -135,7 +140,7 @@ contract LPVaultModule is SignalsCoreStorage {
             // New request or convert from withdraw
             if (!req.isDeposit && req.amount > 0) {
                 // User has pending withdraw - cannot have both
-                revert NoPendingRequest(); // TODO: better error
+                revert PendingWithdrawExists(msg.sender, req.amount);
             }
             req.amount = amount;
             req.requestTimestamp = uint64(block.timestamp);
@@ -175,7 +180,7 @@ contract LPVaultModule is SignalsCoreStorage {
             req.amount += shares;
         } else {
             if (req.isDeposit && req.amount > 0) {
-                revert NoPendingRequest(); // TODO: better error - PendingDepositExists
+                revert PendingDepositExists(msg.sender, req.amount);
             }
             req.amount = shares;
             req.requestTimestamp = uint64(block.timestamp);
@@ -192,7 +197,7 @@ contract LPVaultModule is SignalsCoreStorage {
      */
     function cancelDeposit() external onlyDelegated {
         VaultRequest storage req = userRequests[msg.sender];
-        if (!req.isDeposit || req.amount == 0) revert NoPendingRequest();
+        if (!req.isDeposit || req.amount == 0) revert NoPendingDeposit(msg.sender);
 
         uint256 amount = req.amount;
         
@@ -214,7 +219,7 @@ contract LPVaultModule is SignalsCoreStorage {
      */
     function cancelWithdraw() external onlyDelegated {
         VaultRequest storage req = userRequests[msg.sender];
-        if (req.isDeposit || req.amount == 0) revert NoPendingRequest();
+        if (req.isDeposit || req.amount == 0) revert NoPendingWithdraw(msg.sender);
 
         uint256 shares = req.amount;
 
@@ -330,7 +335,8 @@ contract LPVaultModule is SignalsCoreStorage {
             preBatch.batchPrice,
             postBatch.nav,
             postBatch.shares,
-            postBatch.price
+            postBatch.price,
+            totalRefund
         );
     }
 

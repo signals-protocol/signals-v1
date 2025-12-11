@@ -59,6 +59,7 @@ interface CLMSRErrors {
     error QuantityOverflow();
     error InsufficientPositionQuantity(uint128 want, uint128 have);
     error ProceedsBelowMinimum(uint256 proceeds, uint256 minProceeds);
+    error CloseInconsistent(uint128 expectedZero, uint128 actual);
 
     /* Tree */
     error TreeNotInitialized();
@@ -130,6 +131,7 @@ library CE {
     error QuantityOverflow();
     error InsufficientPositionQuantity(uint128 want, uint128 have);
     error ProceedsBelowMinimum(uint256 proceeds, uint256 minProceeds);
+    error CloseInconsistent(uint128 expectedZero, uint128 actual);
 
     /* Tree */
     error TreeNotInitialized();

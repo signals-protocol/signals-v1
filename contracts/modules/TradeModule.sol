@@ -159,7 +159,7 @@ contract TradeModule is SignalsCoreStorage {
             position.quantity,
             minProceeds
         );
-        require(newQty == 0, "CLOSE_INCONSISTENT");
+        if (newQty != 0) revert CE.CloseInconsistent(0, newQty);
         emit PositionClosed(positionId, msg.sender, baseProceeds);
     }
 

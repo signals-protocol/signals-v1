@@ -63,9 +63,14 @@ contract OracleModule is SignalsCoreStorage {
         emit SettlementPriceSubmitted(marketId, settlementValue, priceTimestamp, recovered);
     }
 
-    function getSettlementPrice(uint256 marketId, uint256 /*timestamp*/)
+    /// @notice Returns the settlement price candidate for a market
+    /// @dev This is a simple getter for the most recent candidate, not a historical lookup
+    /// @param marketId The market ID to query
+    /// @return price The settlement value
+    /// @return priceTimestamp The timestamp when the price was submitted
+    function getSettlementPrice(uint256 marketId)
         external
-        view
+        onlyDelegated
         returns (int256 price, uint64 priceTimestamp)
     {
         SettlementOracleState storage state = settlementOracleState[marketId];

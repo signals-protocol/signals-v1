@@ -503,7 +503,7 @@ describe("VaultBatchFlow Integration", () => {
       // Cancel should fail - request was already processed
       await expect(
         proxy.connect(userB).cancelDeposit()
-      ).to.be.revertedWithCustomError(module, "NoPendingRequest");
+      ).to.be.revertedWithCustomError(module, "NoPendingDeposit");
     });
   });
 

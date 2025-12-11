@@ -264,15 +264,14 @@ contract SignalsCore is
         _delegate(oracleModule, abi.encodeWithSignature("setOracleConfig(address)", signer));
     }
 
-    function getSettlementPrice(uint256 marketId, uint256 timestamp)
+    function getSettlementPrice(uint256 marketId)
         external
         override
         returns (int256 price, uint64 priceTimestamp)
     {
         bytes memory ret = _delegateView(oracleModule, abi.encodeWithSignature(
-            "getSettlementPrice(uint256,uint256)",
-            marketId,
-            timestamp
+            "getSettlementPrice(uint256)",
+            marketId
         ));
         if (ret.length > 0) (price, priceTimestamp) = abi.decode(ret, (int256, uint64));
     }

@@ -109,7 +109,7 @@ describe("OracleModule", () => {
       .to.emit(oracleEvents, "SettlementPriceSubmitted")
       .withArgs(1, 2, priceTimestamp, oracleSigner.address);
 
-    const [price, ts] = await core.getSettlementPrice.staticCall(1, 0);
+    const [price, ts] = await core.getSettlementPrice.staticCall(1);
     expect(price).to.equal(2);
     expect(ts).to.equal(priceTimestamp);
   });
@@ -152,7 +152,7 @@ describe("OracleModule", () => {
 
   it("getSettlementPrice reverts when no candidate recorded", async () => {
     const { core, oracleModule } = await setup();
-    await expect(core.getSettlementPrice(1, 0)).to.be.revertedWithCustomError(
+    await expect(core.getSettlementPrice(1)).to.be.revertedWithCustomError(
       oracleModule,
       "SettlementOracleCandidateMissing"
     );

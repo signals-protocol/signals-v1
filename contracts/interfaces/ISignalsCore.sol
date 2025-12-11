@@ -116,7 +116,13 @@ interface ISignalsCore {
 
     function setOracleConfig(address signer) external;
 
-    function getSettlementPrice(uint256 marketId, uint256 timestamp)
+    /// @notice Returns the settlement price candidate for a market
+    /// @dev This is a simple getter for the most recent candidate, not a historical lookup
+    ///      Note: Not view because it uses delegatecall internally
+    /// @param marketId The market ID to query
+    /// @return price The settlement value
+    /// @return priceTimestamp The timestamp when the price was submitted
+    function getSettlementPrice(uint256 marketId)
         external
         returns (int256 price, uint64 priceTimestamp);
 }
