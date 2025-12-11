@@ -6,8 +6,6 @@ import { calculateFeeWaterfall, generateRandomParams } from "../helpers/feeWater
 describe("FeeWaterfallLib", () => {
   let harness: FeeWaterfallLibHarness;
 
-  const WAD = ethers.parseEther("1");
-
   // Default test parameters
   const defaultParams = {
     Nprev: ethers.parseEther("1000"),    // 1000 NAV
@@ -217,8 +215,10 @@ describe("FeeWaterfallLib", () => {
         Bprev: ethers.parseEther("200"),
       });
 
-      // If there's any dust, it should be included in Ft
-      // Ft = Floss + FcoreLP + Fdust
+      // Ft = Floss + FcoreLP + Fdust, so any dust is included
+      // Fdust >= 0
+      expect(result.Fdust).to.be.gte(0n);
+      expect(result.Ft).to.be.gte(result.Floss);
     });
   });
 
@@ -245,8 +245,9 @@ describe("FeeWaterfallLib", () => {
 
       // After loss compensation and grant
       // Npre should be close to floor when grant is applied
-      const Nfloor = (defaultParams.Nprev * 7n) / 10n; // 700
+      // Nfloor = Nprev * 0.7 = 700
       expect(result.Npre).to.be.gte(result.Nraw); // Grant increases NAV
+      expect(result.Gt).to.be.gt(0n); // Grant should be applied
     });
   });
 

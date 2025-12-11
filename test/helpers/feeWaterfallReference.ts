@@ -41,10 +41,6 @@ function wMul(a: bigint, b: bigint): bigint {
   return (a * b) / WAD;
 }
 
-function max(a: bigint, b: bigint): bigint {
-  return a > b ? a : b;
-}
-
 function min(a: bigint, b: bigint): bigint {
   return a < b ? a : b;
 }

@@ -11,7 +11,6 @@ import { FeeWaterfallLibHarness } from "../../typechain-types";
 import {
   calculateFeeWaterfall,
   generateRandomParams,
-  FeeWaterfallParams,
 } from "../helpers/feeWaterfallReference";
 
 describe("VaultWaterfall Property Tests", () => {
@@ -117,14 +116,14 @@ describe("VaultWaterfall Property Tests", () => {
       const Ftot = ethers.parseEther("80");
       const result = await calculate({ Lt, Ftot });
 
-      // Bnext - Bprev = FBS - Gt + Ffill (backstop coverage fill)
-      // Where FBS = FcoreBS (residual share to backstop)
       // Bnext = Bgrant + Ffill + FcoreBS = (Bprev - Gt) + Ffill + FcoreBS
-      // So: Bnext - Bprev = -Gt + Ffill + FcoreBS
-      const backstopDelta = result.Bnext - defaultParams.Bprev;
-      // This should be: -Gt + Ffill + FcoreBS
-      // We can verify by checking Bnext >= 0 and grant was applied
+      // Verify backstop accounting is consistent
       expect(result.Bnext).to.be.gte(0n);
+      // Backstop delta should equal: -Gt + Ffill + FcoreBS
+      // Since we have grant in loss case, Bnext could be less than Bprev
+      if (result.Gt > 0n) {
+        expect(result.Bnext).to.be.lte(defaultParams.Bprev + result.Ffill);
+      }
     });
 
     it("Backstop receives fee share after coverage fill", async () => {
@@ -200,8 +199,8 @@ describe("VaultWaterfall Property Tests", () => {
 
       // Nfloor = Nprev * (1 + pdd) = 1000 * 0.7 = 700
       const Nfloor = (defaultParams.Nprev * 7n) / 10n;
-      // With grant, Npre should be at or above some minimum
-      // (may not reach floor if deltaEt limits grant)
+      // With grant, Nraw + Gt should approach Nfloor
+      expect(result.Nraw + result.Gt).to.be.gte(Nfloor - 1n); // Allow 1 wei tolerance
     });
 
     it("grant capped by deltaEt even if more needed for floor", async () => {
