@@ -41,7 +41,7 @@ export async function deployAction(env: Environment) {
   const positionFactory = await ethers.getContractFactory("SignalsPosition");
   const positionProxy = await upgrades.deployProxy(positionFactory, [deployer.address], { kind: "uups" });
   await positionProxy.waitForDeployment();
-  const positionImpl = await upgrades.erc1967.getImplementationAddress(positionProxy.target);
+  const positionImpl = await upgrades.erc1967.getImplementationAddress(await positionProxy.getAddress());
 
   const coreFactory = await ethers.getContractFactory("SignalsCore");
   const coreProxy = await upgrades.deployProxy(
@@ -50,7 +50,7 @@ export async function deployAction(env: Environment) {
     { kind: "uups" }
   );
   await coreProxy.waitForDeployment();
-  const coreImpl = await upgrades.erc1967.getImplementationAddress(coreProxy.target);
+  const coreImpl = await upgrades.erc1967.getImplementationAddress(await coreProxy.getAddress());
 
   await coreProxy.setModules(
     tradeModule.target,

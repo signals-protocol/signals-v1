@@ -2,18 +2,18 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { deployLazyMulSegmentTreeTest } from "../../helpers/deploy";
-import { WAD, TWO_WAD, HALF_WAD, MIN_FACTOR, MAX_FACTOR } from "../../helpers/constants";
+import {
+  WAD,
+  TWO_WAD,
+  HALF_WAD,
+  MIN_FACTOR,
+  MAX_FACTOR,
+} from "../../helpers/constants";
 import { approx, createPrng, randomFactors } from "../../helpers/utils";
 
 describe("LazyMulSegmentTree", () => {
   async function deployFixture() {
     const test = await deployLazyMulSegmentTreeTest();
-    return { test };
-  }
-
-  async function deploySmallTreeFixture() {
-    const test = await deployLazyMulSegmentTreeTest();
-    await test.init(10);
     return { test };
   }
 
@@ -69,11 +69,16 @@ describe("LazyMulSegmentTree", () => {
   describe("initAndSeed", () => {
     it("seeds tree with given factors", async () => {
       const { test } = await loadFixture(deployFixture);
-      const factors = [WAD, TWO_WAD, ethers.parseEther("3"), ethers.parseEther("4")];
+      const factors = [
+        WAD,
+        TWO_WAD,
+        ethers.parseEther("3"),
+        ethers.parseEther("4"),
+      ];
       await test.initAndSeed(factors);
-      
+
       expect(await test.getTreeSize()).to.equal(4);
-      
+
       // Total sum should be 1 + 2 + 3 + 4 = 10 WAD
       const total = await test.getTotalSum();
       expect(total).to.equal(ethers.parseEther("10"));
@@ -127,10 +132,10 @@ describe("LazyMulSegmentTree", () => {
     it("multiplies single element by factor", async () => {
       const { test } = await loadFixture(deploySeededTreeFixture);
       await test.applyRangeFactor(0, 0, TWO_WAD);
-      
+
       const val = await test.getNodeValue(0);
       expect(val).to.equal(TWO_WAD);
-      
+
       // Other elements unchanged
       expect(await test.getNodeValue(1)).to.equal(WAD);
     });
@@ -138,7 +143,7 @@ describe("LazyMulSegmentTree", () => {
     it("multiplies range by factor", async () => {
       const { test } = await loadFixture(deploySeededTreeFixture);
       await test.applyRangeFactor(0, 3, TWO_WAD);
-      
+
       // All elements doubled: 4 * 2 = 8 WAD total
       const total = await test.getTotalSum();
       expect(total).to.equal(ethers.parseEther("8"));
@@ -146,12 +151,12 @@ describe("LazyMulSegmentTree", () => {
 
     it("applies multiple factors correctly", async () => {
       const { test } = await loadFixture(deploySeededTreeFixture);
-      
+
       // First: multiply [0,1] by 2
       await test.applyRangeFactor(0, 1, TWO_WAD);
       // Second: multiply [1,2] by 3
       await test.applyRangeFactor(1, 2, ethers.parseEther("3"));
-      
+
       // Element 0: 1 * 2 = 2
       // Element 1: 1 * 2 * 3 = 6
       // Element 2: 1 * 3 = 3
@@ -188,22 +193,22 @@ describe("LazyMulSegmentTree", () => {
     it("handles deferred propagation correctly", async () => {
       const { test } = await loadFixture(deployMediumTreeFixture);
       await test.seedWithFactors(Array(100).fill(WAD));
-      
+
       // Multiple overlapping range operations
       await test.applyRangeFactor(10, 30, TWO_WAD);
       await test.applyRangeFactor(20, 40, ethers.parseEther("3"));
       await test.applyRangeFactor(5, 25, HALF_WAD);
-      
+
       // Query specific values
       // Index 15: 1 * 2 * 0.5 = 1
       expect(await test.getNodeValue(15)).to.equal(WAD);
-      
+
       // Index 25: 1 * 2 * 3 * 0.5 = 3
       approx(await test.getNodeValue(25), ethers.parseEther("3"), 10n);
-      
+
       // Index 35: 1 * 3 = 3
       expect(await test.getNodeValue(35)).to.equal(ethers.parseEther("3"));
-      
+
       // Index 50: unchanged = 1
       expect(await test.getNodeValue(50)).to.equal(WAD);
     });
@@ -216,9 +221,9 @@ describe("LazyMulSegmentTree", () => {
     it("handles tree of size 1", async () => {
       const { test } = await loadFixture(deployFixture);
       await test.initAndSeed([WAD]);
-      
+
       expect(await test.getTotalSum()).to.equal(WAD);
-      
+
       await test.applyRangeFactor(0, 0, TWO_WAD);
       expect(await test.getTotalSum()).to.equal(TWO_WAD);
     });
@@ -226,7 +231,7 @@ describe("LazyMulSegmentTree", () => {
     it("handles minimum valid factor (0.01)", async () => {
       const { test } = await loadFixture(deploySeededTreeFixture);
       await test.applyRangeFactor(0, 0, MIN_FACTOR);
-      
+
       // 1 * 0.01 = 0.01
       approx(await test.getNodeValue(0), MIN_FACTOR, 10n);
     });
@@ -234,7 +239,7 @@ describe("LazyMulSegmentTree", () => {
     it("handles maximum valid factor (100)", async () => {
       const { test } = await loadFixture(deploySeededTreeFixture);
       await test.applyRangeFactor(0, 0, MAX_FACTOR);
-      
+
       // 1 * 100 = 100
       expect(await test.getNodeValue(0)).to.equal(MAX_FACTOR);
     });
@@ -257,13 +262,13 @@ describe("LazyMulSegmentTree", () => {
       const prng = createPrng(42n);
       const factors = randomFactors(prng, 100, MIN_FACTOR, MAX_FACTOR);
       await test.seedWithFactors(factors);
-      
+
       // Calculate expected total
       let expected = 0n;
       for (let i = 0; i < 100; i++) {
         expected += await test.getNodeValue(i);
       }
-      
+
       const total = await test.getTotalSum();
       approx(total, expected, 100n); // Allow small rounding
     });
@@ -271,9 +276,9 @@ describe("LazyMulSegmentTree", () => {
     it("operations preserve sum consistency", async () => {
       const { test } = await loadFixture(deployMediumTreeFixture);
       await test.seedWithFactors(Array(100).fill(WAD));
-      
+
       const prng = createPrng(123n);
-      
+
       // Apply 10 random range operations
       for (let i = 0; i < 10; i++) {
         const lo = prng.nextInt(100);
@@ -281,13 +286,13 @@ describe("LazyMulSegmentTree", () => {
         const factor = prng.nextInRange(MIN_FACTOR, MAX_FACTOR);
         await test.applyRangeFactor(lo, hi, factor);
       }
-      
+
       // Verify sum consistency
       let computed = 0n;
       for (let i = 0; i < 100; i++) {
         computed += await test.getNodeValue(i);
       }
-      
+
       const total = await test.getTotalSum();
       // Allow larger tolerance due to accumulated WAD rounding
       approx(total, computed, 10000n);
@@ -300,21 +305,21 @@ describe("LazyMulSegmentTree", () => {
   describe("Property: monotonicity", () => {
     it("factor > 1 increases range sum", async () => {
       const { test } = await loadFixture(deploySeededTreeFixture);
-      
+
       const before = await test.getRangeSum(0, 1);
       await test.applyRangeFactor(0, 1, TWO_WAD);
       const after = await test.getRangeSum(0, 1);
-      
+
       expect(after).to.be.gt(before);
     });
 
     it("factor < 1 decreases range sum", async () => {
       const { test } = await loadFixture(deploySeededTreeFixture);
-      
+
       const before = await test.getRangeSum(0, 1);
       await test.applyRangeFactor(0, 1, HALF_WAD);
       const after = await test.getRangeSum(0, 1);
-      
+
       expect(after).to.be.lt(before);
     });
   });
@@ -332,16 +337,15 @@ describe("LazyMulSegmentTree", () => {
         ethers.parseEther("8"),
       ];
       await test.initAndSeed(factors);
-      
+
       // Total: 1 + 2 + 4 + 8 = 15
       expect(await test.getTotalSum()).to.equal(ethers.parseEther("15"));
-      
+
       // Apply factor to middle range
       await test.applyRangeFactor(1, 2, TWO_WAD);
-      
+
       // New total: 1 + 4 + 8 + 8 = 21
       expect(await test.getTotalSum()).to.equal(ethers.parseEther("21"));
     });
   });
 });
-

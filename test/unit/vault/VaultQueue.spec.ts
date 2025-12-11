@@ -1,51 +1,17 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { LPVaultModule, MockPaymentToken } from "../../../typechain-types";
-import { WAD, ONE_DAY } from "../../helpers/constants";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 /**
- * VaultQueue Unit Tests
+ * VaultQueue Unit Tests (Placeholder)
  *
- * Tests queue management through LPVaultModule
+ * Queue management is tested through LPVaultModuleProxy in VaultBatchFlow.spec.ts
+ * These placeholder tests document expected behavior for Phase 5 implementation.
+ *
  * Reference: docs/vault-invariants.md
- *
- * Invariants:
- * - INV-V9: Batch ordering (withdraws before deposits)
- * - INV-V10: D_lag enforcement
- * - INV-V11: Queue balance consistency
  */
 
 describe("VaultQueue", () => {
-  async function deployVaultFixture() {
-    const [owner, userA, userB, userC] = await ethers.getSigners();
-
-    // Deploy mock payment token
-    const payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
-    await payment.waitForDeployment();
-
-    // Deploy LPVaultModule as standalone for testing
-    // Note: In production, this would be called via delegatecall from SignalsCore
-    const vaultModule = await (await ethers.getContractFactory("LPVaultModule")).deploy();
-    await vaultModule.waitForDeployment();
-
-    // Fund users
-    const fundAmount = ethers.parseEther("10000");
-    await payment.transfer(userA.address, fundAmount);
-    await payment.transfer(userB.address, fundAmount);
-    await payment.transfer(userC.address, fundAmount);
-    await payment.connect(userA).approve(vaultModule.target, ethers.MaxUint256);
-    await payment.connect(userB).approve(vaultModule.target, ethers.MaxUint256);
-    await payment.connect(userC).approve(vaultModule.target, ethers.MaxUint256);
-
-    return { owner, userA, userB, userC, payment, vaultModule };
-  }
-
   // Note: LPVaultModule is delegate-only, so direct calls will revert.
-  // For unit testing, we need a harness or proxy. For now, these tests
-  // serve as documentation of expected behavior. Implementation tests
-  // will be in VaultBatchFlow.spec.ts with proper harness.
+  // Actual queue tests are in VaultBatchFlow.spec.ts with proper harness.
 
   // ============================================================
   // INV-V9: Batch ordering

@@ -1,10 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
 import {
-  MockPaymentToken,
-  MockFeePolicy,
-  TradeModuleProxy,
-  TradeModule,
   SignalsPosition,
   TestERC1967Proxy,
 } from "../../../typechain-types";
@@ -100,7 +96,7 @@ describe("TradeModule stress and boundary scenarios", () => {
     expect(Number(market.openPositionCount)).to.equal(totalOps);
     // close half randomly
     for (let i = 1; i <= totalOps; i += 2) {
-      const pos = await position.getPosition(i);
+      await position.getPosition(i); // Ensure position exists
       const ownerIdx = Number(rand(users.length));
       const owner = users[ownerIdx];
       // skip if owner mismatch, just attempt and tolerate revert by catching

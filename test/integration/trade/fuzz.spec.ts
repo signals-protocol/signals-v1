@@ -3,7 +3,6 @@ import { expect } from "chai";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import {
   MockPaymentToken,
-  MockFeePolicy,
   TradeModuleProxy,
   TradeModule,
   SignalsPosition,
@@ -91,7 +90,7 @@ async function deploySystem(): Promise<System> {
 describe("TradeModule randomized multi-market flows", () => {
   it("maintains openPositionCount and position existence across random ops", async () => {
     const sys = await deploySystem();
-    const { users, core, payment, position } = sys;
+    const { users, core, payment } = sys;
     type Pos = { owner: number; market: number; qty: bigint; alive: boolean };
     const positions: Record<number, Pos> = {};
     let nextId = 1;

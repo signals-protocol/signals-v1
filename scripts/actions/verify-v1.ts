@@ -3,7 +3,7 @@ import { loadEnvironment } from "../utils/environment";
 import type { Environment } from "../types/environment";
 
 export async function verifyAction(env: Environment) {
-  const { ethers, network } = hre;
+  const { network } = hre;
   console.log(`[verify] environment=${env} network=${network.name}`);
   const envData = loadEnvironment(env);
 

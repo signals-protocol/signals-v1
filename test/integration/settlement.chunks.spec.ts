@@ -3,8 +3,6 @@ import { expect } from "chai";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import {
   MarketLifecycleModule,
-  MockPaymentToken,
-  MockFeePolicy,
   SignalsPosition,
   SignalsCore,
   TradeModule,
@@ -18,7 +16,7 @@ async function deploySystem() {
   const [owner, u1, u2, u3, oracleSigner] = await ethers.getSigners();
 
   const payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
-  const feePolicy = await (await ethers.getContractFactory("MockFeePolicy")).deploy(0);
+  await (await ethers.getContractFactory("MockFeePolicy")).deploy(0); // feePolicy not used directly
 
   const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
   const positionImpl = await positionImplFactory.deploy();
@@ -69,7 +67,7 @@ async function deploySystem() {
 
 describe("Settlement chunks and claim totals", () => {
   it("handles multiple users/positions across chunks and preserves payout totals", async () => {
-    const { owner, u1, u2, u3, oracleSigner, core, payment, position, lifecycleModule } = await deploySystem();
+    const { u1, u2, u3, oracleSigner, core, payment, lifecycleModule } = await deploySystem();
 
     const now = BigInt(await time.latest());
     const start = now - 10n;

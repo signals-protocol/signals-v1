@@ -40,7 +40,13 @@ describe("VaultAccountingLib", () => {
       const fees = ethers.parseEther("30");
       const grant = ethers.parseEther("10");
 
-      const [navPre] = await lib.computePreBatch(navPrev, sharesPrev, pnl, fees, grant);
+      const [navPre] = await lib.computePreBatch(
+        navPrev,
+        sharesPrev,
+        pnl,
+        fees,
+        grant
+      );
 
       // N_pre = 1000 - 50 + 30 + 10 = 990
       expect(navPre).to.equal(ethers.parseEther("990"));
@@ -53,7 +59,13 @@ describe("VaultAccountingLib", () => {
       const fees = ethers.parseEther("20");
       const grant = 0n;
 
-      const [navPre] = await lib.computePreBatch(navPrev, sharesPrev, pnl, fees, grant);
+      const [navPre] = await lib.computePreBatch(
+        navPrev,
+        sharesPrev,
+        pnl,
+        fees,
+        grant
+      );
 
       // N_pre = 1000 + 100 + 20 + 0 = 1120
       expect(navPre).to.equal(ethers.parseEther("1120"));
@@ -63,7 +75,13 @@ describe("VaultAccountingLib", () => {
       const navPrev = ethers.parseEther("1000");
       const sharesPrev = ethers.parseEther("1000");
 
-      const [navPre] = await lib.computePreBatch(navPrev, sharesPrev, 0n, 0n, 0n);
+      const [navPre] = await lib.computePreBatch(
+        navPrev,
+        sharesPrev,
+        0n,
+        0n,
+        0n
+      );
 
       expect(navPre).to.equal(navPrev);
     });
@@ -73,7 +91,13 @@ describe("VaultAccountingLib", () => {
       const sharesPrev = ethers.parseEther("100");
       const pnl = ethers.parseEther("-200"); // loss > nav
 
-      const [navPre] = await lib.computePreBatch(navPrev, sharesPrev, pnl, 0n, 0n);
+      const [navPre] = await lib.computePreBatch(
+        navPrev,
+        sharesPrev,
+        pnl,
+        0n,
+        0n
+      );
 
       expect(navPre).to.equal(0n);
     });
@@ -89,10 +113,16 @@ describe("VaultAccountingLib", () => {
       const sharesPrev = ethers.parseEther("900");
       // Π = 0, so navPre = 1000
 
-      const [navPre, batchPrice] = await lib.computePreBatch(navPrev, sharesPrev, 0n, 0n, 0n);
+      const [navPre, batchPrice] = await lib.computePreBatch(
+        navPrev,
+        sharesPrev,
+        0n,
+        0n,
+        0n
+      );
 
       // P_e = 1000 / 900 ≈ 1.111...e18
-      const expectedPrice = navPre * WAD / sharesPrev;
+      const expectedPrice = (navPre * WAD) / sharesPrev;
       expect(batchPrice).to.equal(expectedPrice);
     });
 
@@ -100,7 +130,13 @@ describe("VaultAccountingLib", () => {
       const navPrev = ethers.parseEther("990");
       const sharesPrev = ethers.parseEther("900");
 
-      const [navPre, batchPrice] = await lib.computePreBatch(navPrev, sharesPrev, 0n, 0n, 0n);
+      const [, batchPrice] = await lib.computePreBatch(
+        navPrev,
+        sharesPrev,
+        0n,
+        0n,
+        0n
+      );
 
       // P_e = 990 / 900 = 1.1e18
       expect(batchPrice).to.equal(ethers.parseEther("1.1"));
@@ -109,8 +145,9 @@ describe("VaultAccountingLib", () => {
     it("reverts when sharesPrev = 0", async () => {
       const navPrev = ethers.parseEther("1000");
 
-      await expect(lib.computePreBatch(navPrev, 0n, 0n, 0n, 0n))
-        .to.be.revertedWithCustomError(lib, "ZeroSharesNotAllowed");
+      await expect(
+        lib.computePreBatch(navPrev, 0n, 0n, 0n, 0n)
+      ).to.be.revertedWithCustomError(lib, "ZeroSharesNotAllowed");
     });
   });
 
@@ -119,14 +156,17 @@ describe("VaultAccountingLib", () => {
   // ============================================================
   describe("INV-V3: Vault seeding", () => {
     it("sets initial price to 1e18 on seed", async () => {
-      const [navPre, batchPrice] = await lib.computePreBatchForSeed(0n, 0n, 0n, 0n);
+      const [, batchPrice] = await lib.computePreBatchForSeed(0n, 0n, 0n, 0n);
 
       expect(batchPrice).to.equal(WAD);
     });
 
     it("handles non-zero initial nav on seed", async () => {
       const [navPre, batchPrice] = await lib.computePreBatchForSeed(
-        ethers.parseEther("100"), 0n, 0n, 0n
+        ethers.parseEther("100"),
+        0n,
+        0n,
+        0n
       );
 
       expect(navPre).to.equal(ethers.parseEther("100"));
@@ -145,7 +185,12 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1"); // P = 1.0
       const deposit = ethers.parseEther("100");
 
-      const [newNav, newShares, minted] = await lib.applyDeposit(nav, shares, price, deposit);
+      const [newNav, newShares, minted] = await lib.applyDeposit(
+        nav,
+        shares,
+        price,
+        deposit
+      );
 
       expect(newNav).to.equal(ethers.parseEther("1100"));
       expect(minted).to.equal(ethers.parseEther("100"));
@@ -158,7 +203,12 @@ describe("VaultAccountingLib", () => {
       const price = (nav * WAD) / shares; // ~1.111e18
       const deposit = ethers.parseEther("100");
 
-      const [newNav, newShares] = await lib.applyDeposit(nav, shares, price, deposit);
+      const [newNav, newShares] = await lib.applyDeposit(
+        nav,
+        shares,
+        price,
+        deposit
+      );
       const newPrice = (newNav * WAD) / newShares;
 
       // Price preservation: |newPrice - price| <= 1 wei
@@ -172,15 +222,21 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1");
       const deposit = ethers.parseEther("1000000"); // 1M deposit
 
-      const [newNav, newShares] = await lib.applyDeposit(nav, shares, price, deposit);
+      const [newNav, newShares] = await lib.applyDeposit(
+        nav,
+        shares,
+        price,
+        deposit
+      );
 
       expect(newNav).to.equal(ethers.parseEther("1001000"));
       expect(newShares).to.equal(ethers.parseEther("1001000"));
     });
 
     it("reverts with zero price", async () => {
-      await expect(lib.applyDeposit(WAD, WAD, 0n, WAD))
-        .to.be.revertedWithCustomError(lib, "ZeroPriceNotAllowed");
+      await expect(
+        lib.applyDeposit(WAD, WAD, 0n, WAD)
+      ).to.be.revertedWithCustomError(lib, "ZeroPriceNotAllowed");
     });
   });
 
@@ -196,7 +252,10 @@ describe("VaultAccountingLib", () => {
       const withdrawShares = ethers.parseEther("50");
 
       const [newNav, newShares, withdrawAmount] = await lib.applyWithdraw(
-        nav, shares, price, withdrawShares
+        nav,
+        shares,
+        price,
+        withdrawShares
       );
 
       expect(newNav).to.equal(ethers.parseEther("950"));
@@ -210,8 +269,13 @@ describe("VaultAccountingLib", () => {
       const price = (nav * WAD) / shares; // 1.1e18
       const withdrawShares = ethers.parseEther("100");
 
-      const [newNav, newShares] = await lib.applyWithdraw(nav, shares, price, withdrawShares);
-      
+      const [newNav, newShares] = await lib.applyWithdraw(
+        nav,
+        shares,
+        price,
+        withdrawShares
+      );
+
       // New price calculation
       const newPrice = newShares > 0n ? (newNav * WAD) / newShares : WAD;
 
@@ -226,7 +290,10 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1");
 
       const [newNav, newShares, withdrawAmount] = await lib.applyWithdraw(
-        nav, shares, price, shares
+        nav,
+        shares,
+        price,
+        shares
       );
 
       expect(newNav).to.equal(0n);
@@ -257,8 +324,9 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1");
       const withdrawShares = ethers.parseEther("100");
 
-      await expect(lib.applyWithdraw(nav, shares, price, withdrawShares))
-        .to.be.revertedWithCustomError(lib, "InsufficientNAV");
+      await expect(
+        lib.applyWithdraw(nav, shares, price, withdrawShares)
+      ).to.be.revertedWithCustomError(lib, "InsufficientNAV");
     });
   });
 
@@ -376,9 +444,8 @@ describe("VaultAccountingLib", () => {
       const shares = ethers.parseEther("1000");
       const previousPeak = ethers.parseEther("1");
 
-      const [navOut, sharesOut, price, pricePeak, drawdown] = await lib.computePostBatchState(
-        nav, shares, previousPeak
-      );
+      const [navOut, sharesOut, price, pricePeak, drawdown] =
+        await lib.computePostBatchState(nav, shares, previousPeak);
 
       expect(navOut).to.equal(nav);
       expect(sharesOut).to.equal(shares);
@@ -393,7 +460,9 @@ describe("VaultAccountingLib", () => {
       const previousPeak = ethers.parseEther("1.2");
 
       const [, , price, pricePeak, drawdown] = await lib.computePostBatchState(
-        nav, shares, previousPeak
+        nav,
+        shares,
+        previousPeak
       );
 
       expect(price).to.equal(ethers.parseEther("0.9"));
@@ -414,20 +483,24 @@ describe("VaultAccountingLib", () => {
       const amount = ethers.parseEther("100");
 
       // Deposit
-      const [navAfterDeposit, sharesAfterDeposit, minted] = await lib.applyDeposit(
-        initialNav, initialShares, price, amount
-      );
+      const [navAfterDeposit, sharesAfterDeposit, minted] =
+        await lib.applyDeposit(initialNav, initialShares, price, amount);
 
       // Withdraw same shares
       const [finalNav, finalShares] = await lib.applyWithdraw(
-        navAfterDeposit, sharesAfterDeposit, price, minted
+        navAfterDeposit,
+        sharesAfterDeposit,
+        price,
+        minted
       );
 
       // Should return to initial state (within rounding)
-      const navDiff = finalNav > initialNav ? finalNav - initialNav : initialNav - finalNav;
-      const sharesDiff = finalShares > initialShares 
-        ? finalShares - initialShares 
-        : initialShares - finalShares;
+      const navDiff =
+        finalNav > initialNav ? finalNav - initialNav : initialNav - finalNav;
+      const sharesDiff =
+        finalShares > initialShares
+          ? finalShares - initialShares
+          : initialShares - finalShares;
 
       expect(navDiff).to.be.lte(1n);
       expect(sharesDiff).to.equal(0n);
@@ -439,10 +512,18 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1");
 
       // Multiple operations
-      [nav, shares] = (await lib.applyDeposit(nav, shares, price, ethers.parseEther("50"))).slice(0, 2) as [bigint, bigint];
-      [nav, shares] = (await lib.applyDeposit(nav, shares, price, ethers.parseEther("30"))).slice(0, 2) as [bigint, bigint];
-      [nav, shares] = (await lib.applyWithdraw(nav, shares, price, ethers.parseEther("20"))).slice(0, 2) as [bigint, bigint];
-      [nav, shares] = (await lib.applyDeposit(nav, shares, price, ethers.parseEther("100"))).slice(0, 2) as [bigint, bigint];
+      [nav, shares] = (
+        await lib.applyDeposit(nav, shares, price, ethers.parseEther("50"))
+      ).slice(0, 2) as [bigint, bigint];
+      [nav, shares] = (
+        await lib.applyDeposit(nav, shares, price, ethers.parseEther("30"))
+      ).slice(0, 2) as [bigint, bigint];
+      [nav, shares] = (
+        await lib.applyWithdraw(nav, shares, price, ethers.parseEther("20"))
+      ).slice(0, 2) as [bigint, bigint];
+      [nav, shares] = (
+        await lib.applyDeposit(nav, shares, price, ethers.parseEther("100"))
+      ).slice(0, 2) as [bigint, bigint];
 
       // Final price should still be ~1.0
       const finalPrice = shares > 0n ? (nav * WAD) / shares : WAD;
@@ -460,7 +541,11 @@ describe("VaultAccountingLib", () => {
 
       // Should not overflow
       const [navPre, batchPrice] = await lib.computePreBatch(
-        maxNav, maxShares, 0n, 0n, 0n
+        maxNav,
+        maxShares,
+        0n,
+        0n,
+        0n
       );
 
       expect(navPre).to.equal(maxNav);
@@ -472,7 +557,11 @@ describe("VaultAccountingLib", () => {
       const minShares = 1n;
 
       const [navPre, batchPrice] = await lib.computePreBatch(
-        minNav, minShares, 0n, 0n, 0n
+        minNav,
+        minShares,
+        0n,
+        0n,
+        0n
       );
 
       expect(navPre).to.equal(minNav);

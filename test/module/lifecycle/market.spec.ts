@@ -3,12 +3,10 @@ import { expect } from "chai";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import {
   MarketLifecycleModule,
-  MockPaymentToken,
-  MockSignalsPosition,
   OracleModule,
   SignalsCoreHarness,
 } from "../../../typechain-types";
-import { ISignalsCore } from "../../../typechain-types/contracts/core/SignalsCore";
+import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleHarness";
 
 const abiCoder = ethers.AbiCoder.defaultAbiCoder();
 
@@ -209,7 +207,7 @@ describe("MarketLifecycleModule", () => {
   it("settleMarket enforces candidate and window checks", async () => {
     const { core, lifecycle, oracleModule, oracleSigner, chainId } = await setup();
     const { end } = await createDefaultMarket(core);
-    const lifecycleEvents = lifecycle.attach(await core.getAddress());
+    lifecycle.attach(await core.getAddress()); // Attach for event access
 
     await expect(core.settleMarket(1)).to.be.revertedWithCustomError(lifecycle, "SettlementOracleCandidateMissing");
 

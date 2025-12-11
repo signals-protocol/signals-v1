@@ -42,9 +42,7 @@ describe("SignalsPosition Access Control", () => {
     });
 
     it("allows owner to update core address", async () => {
-      const { position, owner, alice } = await loadFixture(
-        deployPositionFixture
-      );
+      const { position, owner } = await loadFixture(deployPositionFixture);
 
       const newCore = ethers.Wallet.createRandom().address;
       await position.connect(owner).setCore(newCore);

@@ -2,9 +2,6 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import {
-  MockPaymentToken,
-  MockFeePolicy,
-  TradeModuleProxy,
   SignalsPosition,
 } from "../../typechain-types";
 import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
@@ -162,7 +159,7 @@ describe("Core Security", () => {
 
   describe("Position Ownership", () => {
     it("prevents transfer by non-owner", async () => {
-      const { position, core, user, attacker, owner } = await loadFixture(
+      const { position, core, user, attacker } = await loadFixture(
         deploySecurityFixture
       );
 

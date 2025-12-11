@@ -3,7 +3,6 @@ import { expect } from "chai";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import {
   MarketLifecycleModule,
-  MockPaymentToken,
   OracleModule,
   TradeModule,
   SignalsCore,
@@ -94,14 +93,12 @@ describe("Lifecycle + Trade integration", () => {
 
   it("runs create -> trade -> settlement -> snapshot -> claim flow", async () => {
     const {
-      owner,
       user,
       oracleSigner,
       payment,
       position,
       core,
       lifecycleModule,
-      submitWindow,
       finalizeDeadline,
       chainId,
     } = await setup();
@@ -169,7 +166,6 @@ describe("Lifecycle + Trade integration", () => {
 
   it("burns loser positions with zero payout and prevents double-claim", async () => {
     const {
-      owner,
       user,
       oracleSigner,
       payment,
@@ -220,7 +216,7 @@ describe("Lifecycle + Trade integration", () => {
   });
 
   it("enforces time gates for trading, settlement, and claim windows", async () => {
-    const { owner, user, oracleSigner, payment, position, core, chainId } = await setup();
+    const { user, oracleSigner, payment, core, chainId } = await setup();
     const now = BigInt(await time.latest());
     const start = now + 100n;
     const end = start + 100n;

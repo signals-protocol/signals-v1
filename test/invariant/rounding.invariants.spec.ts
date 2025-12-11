@@ -1,11 +1,7 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import {
-  MockPaymentToken,
-  MockFeePolicy,
-  TradeModuleProxy,
   SignalsPosition,
 } from "../../typechain-types";
 import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
@@ -118,12 +114,12 @@ describe("Rounding Invariants", () => {
     });
 
     it("INV-R-2: Cost never underestimates (user protection)", async () => {
-      const { core, user, payment, position, marketId } = await loadFixture(
+      const { core, user, payment, marketId } = await loadFixture(
         deployRoundingFixture
       );
 
       const balanceBefore = await payment.balanceOf(user.address);
-      const estimatedCost = await core.calculateOpenCost.staticCall(
+      await core.calculateOpenCost.staticCall(
         marketId,
         3,
         6,
@@ -165,7 +161,7 @@ describe("Rounding Invariants", () => {
       const positionId = positions[0];
 
       const balanceBefore = await payment.balanceOf(user.address);
-      const estimatedProceeds = await core.calculateDecreaseProceeds.staticCall(
+      await core.calculateDecreaseProceeds.staticCall(
         positionId,
         MEDIUM_QUANTITY
       );
@@ -238,7 +234,7 @@ describe("Rounding Invariants", () => {
     });
 
     it("INV-R-6: Protocol collects rounding dust, never loses it", async () => {
-      const { core, user, payment, position, marketId, owner } = await loadFixture(
+      const { core, user, payment, marketId } = await loadFixture(
         deployRoundingFixture
       );
 

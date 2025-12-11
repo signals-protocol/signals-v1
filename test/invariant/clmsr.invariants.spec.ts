@@ -7,7 +7,6 @@ import {
   MockFeePolicy,
   TradeModuleProxy,
   SignalsPosition,
-  TestERC1967Proxy,
 } from "../../typechain-types";
 import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
 import {
@@ -16,7 +15,7 @@ import {
   SMALL_QUANTITY,
   MEDIUM_QUANTITY,
 } from "../helpers/constants";
-import { approx, createPrng } from "../helpers/utils";
+import { createPrng } from "../helpers/utils";
 
 /**
  * CLMSR Invariant Tests
@@ -469,8 +468,9 @@ describe("CLMSR Invariants", () => {
   // ============================================================
   describe("Path Independence", () => {
     it("INV-PI-1: Same start/end state yields same cost regardless of path", async () => {
-      const { core, user, position, marketId, owner, payment, feePolicy } =
-        await loadFixture(deployInvariantFixture);
+      const { core, user, marketId } = await loadFixture(
+        deployInvariantFixture
+      );
 
       // Path 1: Direct buy [2,5) with quantity Q
       const directCost = await core.calculateOpenCost.staticCall(
@@ -585,10 +585,7 @@ describe("CLMSR Invariants", () => {
 
       // Theoretical max loss for uniform prior: α * ln(n)
       // With α = 1 WAD and n = 10 bins: max_loss = ln(10) ≈ 2.302 WAD
-      const alpha = WAD; // 1e18
       const n = BigInt(NUM_BINS);
-      const ln_n_approx = 2302585092994045684n; // ln(10) * 1e18
-      const maxLoss = (alpha * ln_n_approx) / WAD;
 
       // The initial cost C(0) for uniform prior = α * ln(n)
       // This represents the "potential" that can be lost
@@ -647,7 +644,7 @@ describe("CLMSR Invariants", () => {
   // ============================================================
   describe("Stress Invariants", () => {
     it("INV-10: Sum remains consistent under many operations", async () => {
-      const { core, user, user2, position, marketId } = await loadFixture(
+      const { core, user, marketId } = await loadFixture(
         deployInvariantFixture
       );
 

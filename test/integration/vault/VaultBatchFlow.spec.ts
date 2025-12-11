@@ -1,9 +1,8 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { LPVaultModuleProxy, MockPaymentToken, LPVaultModule } from "../../../typechain-types";
-import { WAD, ONE_DAY } from "../../helpers/constants";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { LPVaultModuleProxy } from "../../../typechain-types";
+import { WAD } from "../../helpers/constants";
 
 /**
  * VaultBatchFlow Integration Tests
@@ -26,7 +25,9 @@ describe("VaultBatchFlow Integration", () => {
 
     // Deploy proxy
     const proxyFactory = await ethers.getContractFactory("LPVaultModuleProxy");
-    const proxy = await proxyFactory.deploy(module.target) as LPVaultModuleProxy;
+    const proxy = (await proxyFactory.deploy(
+      module.target
+    )) as LPVaultModuleProxy;
 
     // Configure proxy
     await proxy.setPaymentToken(payment.target);
@@ -60,7 +61,7 @@ describe("VaultBatchFlow Integration", () => {
   // ============================================================
   describe("Vault seeding", () => {
     it("seeds vault with initial capital", async () => {
-      const { proxy, userA, payment } = await loadFixture(deployVaultFixture);
+      const { proxy, userA } = await loadFixture(deployVaultFixture);
 
       const seedAmount = ethers.parseEther("1000");
       await proxy.connect(userA).seedVault(seedAmount);
@@ -75,15 +76,19 @@ describe("VaultBatchFlow Integration", () => {
     it("rejects seed below minimum", async () => {
       const { proxy, userA, module } = await loadFixture(deployVaultFixture);
 
-      await expect(proxy.connect(userA).seedVault(ethers.parseEther("50")))
-        .to.be.revertedWithCustomError(module, "InsufficientSeedAmount");
+      await expect(
+        proxy.connect(userA).seedVault(ethers.parseEther("50"))
+      ).to.be.revertedWithCustomError(module, "InsufficientSeedAmount");
     });
 
     it("rejects double seeding", async () => {
-      const { proxy, userA, module } = await loadFixture(deploySeededVaultFixture);
+      const { proxy, userA, module } = await loadFixture(
+        deploySeededVaultFixture
+      );
 
-      await expect(proxy.connect(userA).seedVault(ethers.parseEther("1000")))
-        .to.be.revertedWithCustomError(module, "VaultAlreadySeeded");
+      await expect(
+        proxy.connect(userA).seedVault(ethers.parseEther("1000"))
+      ).to.be.revertedWithCustomError(module, "VaultAlreadySeeded");
     });
   });
 
@@ -92,7 +97,7 @@ describe("VaultBatchFlow Integration", () => {
   // ============================================================
   describe("processDailyBatch", () => {
     it("computes preBatchNav from P&L inputs", async () => {
-      const { proxy, userA } = await loadFixture(deploySeededVaultFixture);
+      const { proxy } = await loadFixture(deploySeededVaultFixture);
 
       // Initial: N=1000, S=1000
       // P&L: L=-50, F=30, G=10 → Π = -10
@@ -109,7 +114,7 @@ describe("VaultBatchFlow Integration", () => {
     });
 
     it("calculates batch price from preBatchNav and shares", async () => {
-      const { proxy, userA } = await loadFixture(deploySeededVaultFixture);
+      const { proxy } = await loadFixture(deploySeededVaultFixture);
 
       // N_pre = 990, S = 1000 → P_e = 0.99
       await proxy.processBatch(ethers.parseEther("-10"), 0n, 0n);
@@ -118,7 +123,7 @@ describe("VaultBatchFlow Integration", () => {
     });
 
     it("updates NAV and shares correctly after batch", async () => {
-      const { proxy, userA, userB } = await loadFixture(deploySeededVaultFixture);
+      const { proxy, userB } = await loadFixture(deploySeededVaultFixture);
 
       // Add deposit request
       const depositAmount = ethers.parseEther("100");
@@ -141,7 +146,9 @@ describe("VaultBatchFlow Integration", () => {
 
       // N = 1100, S = 1000 → P = 1.1
       expect(await proxy.getVaultPrice()).to.equal(ethers.parseEther("1.1"));
-      expect(await proxy.getVaultPricePeak()).to.equal(ethers.parseEther("1.1"));
+      expect(await proxy.getVaultPricePeak()).to.equal(
+        ethers.parseEther("1.1")
+      );
     });
 
     it("emits BatchProcessed event", async () => {
@@ -150,8 +157,10 @@ describe("VaultBatchFlow Integration", () => {
       // Attach module interface to proxy address for events
       const moduleAtProxy = module.attach(proxy.target);
 
-      await expect(proxy.processBatch(0n, 0n, 0n))
-        .to.emit(moduleAtProxy, "BatchProcessed");
+      await expect(proxy.processBatch(0n, 0n, 0n)).to.emit(
+        moduleAtProxy,
+        "BatchProcessed"
+      );
     });
   });
 
@@ -189,7 +198,11 @@ describe("VaultBatchFlow Integration", () => {
       const { proxy } = await loadFixture(deploySeededVaultFixture);
 
       // Loss offset by grant
-      await proxy.processBatch(ethers.parseEther("-100"), 0n, ethers.parseEther("100"));
+      await proxy.processBatch(
+        ethers.parseEther("-100"),
+        0n,
+        ethers.parseEther("100")
+      );
 
       // N = 1000 - 100 + 100 = 1000
       expect(await proxy.getVaultNav()).to.equal(ethers.parseEther("1000"));
@@ -227,12 +240,14 @@ describe("VaultBatchFlow Integration", () => {
       // Final S ≈ 1090.909
 
       const finalShares = await proxy.getVaultShares();
-      const expectedShares = ethers.parseEther("1000") + 
-        (ethers.parseEther("100") * WAD / ethers.parseEther("1.1"));
-      
-      const diff = finalShares > expectedShares 
-        ? finalShares - expectedShares 
-        : expectedShares - finalShares;
+      const expectedShares =
+        ethers.parseEther("1000") +
+        (ethers.parseEther("100") * WAD) / ethers.parseEther("1.1");
+
+      const diff =
+        finalShares > expectedShares
+          ? finalShares - expectedShares
+          : expectedShares - finalShares;
       expect(diff).to.be.lte(1n); // Within 1 wei
     });
 
@@ -292,7 +307,10 @@ describe("VaultBatchFlow Integration", () => {
       // Day 3: +8%
       await proxy.processBatch(ethers.parseEther("83.6"), 0n, 0n); // ~8% of 1045
       const nav = await proxy.getVaultNav();
-      expect(nav).to.be.closeTo(ethers.parseEther("1128.6"), ethers.parseEther("0.1"));
+      expect(nav).to.be.closeTo(
+        ethers.parseEther("1128.6"),
+        ethers.parseEther("0.1")
+      );
     });
 
     it("peak tracks highest price across days", async () => {
@@ -300,11 +318,15 @@ describe("VaultBatchFlow Integration", () => {
 
       // Day 1: +20% → peak = 1.2
       await proxy.processBatch(ethers.parseEther("200"), 0n, 0n);
-      expect(await proxy.getVaultPricePeak()).to.equal(ethers.parseEther("1.2"));
+      expect(await proxy.getVaultPricePeak()).to.equal(
+        ethers.parseEther("1.2")
+      );
 
       // Day 2: -10% → peak stays at 1.2
       await proxy.processBatch(ethers.parseEther("-120"), 0n, 0n);
-      expect(await proxy.getVaultPricePeak()).to.equal(ethers.parseEther("1.2"));
+      expect(await proxy.getVaultPricePeak()).to.equal(
+        ethers.parseEther("1.2")
+      );
 
       // Day 3: +30% → peak = 1.2 * 0.9 * 1.3 = 1.404... but check actual
       await proxy.processBatch(ethers.parseEther("324"), 0n, 0n); // 30% of 1080
@@ -342,7 +364,9 @@ describe("VaultBatchFlow Integration", () => {
   // ============================================================
   describe("Additional batch behavior", () => {
     it("processes withdraws before deposits", async () => {
-      const { proxy, userA, userB } = await loadFixture(deploySeededVaultFixture);
+      const { proxy, userA, userB } = await loadFixture(
+        deploySeededVaultFixture
+      );
 
       await proxy.connect(userA).requestWithdraw(ethers.parseEther("200"));
       await proxy.connect(userB).requestDeposit(ethers.parseEther("100"));
@@ -358,7 +382,9 @@ describe("VaultBatchFlow Integration", () => {
       await proxy.processBatch(ethers.parseEther("-240"), 0n, 0n);
 
       expect(await proxy.getVaultPrice()).to.equal(ethers.parseEther("0.96"));
-      expect(await proxy.getVaultPricePeak()).to.equal(ethers.parseEther("1.2"));
+      expect(await proxy.getVaultPricePeak()).to.equal(
+        ethers.parseEther("1.2")
+      );
     });
 
     it("decreases NAV by withdraw amount", async () => {
@@ -384,18 +410,30 @@ describe("VaultBatchFlow Integration", () => {
   // Phase 5 placeholders
   // ============================================================
   describe("Fee waterfall integration (Phase 5)", () => {
-    it("receives LP fee portion (F_LP)", () => { expect(true).to.equal(true); });
-    it("receives backstop grant when needed (G_t)", () => { expect(true).to.equal(true); });
-    it("grant limited by backstop balance", () => { expect(true).to.equal(true); });
+    it("receives LP fee portion (F_LP)", () => {
+      expect(true).to.equal(true);
+    });
+    it("receives backstop grant when needed (G_t)", () => {
+      expect(true).to.equal(true);
+    });
+    it("grant limited by backstop balance", () => {
+      expect(true).to.equal(true);
+    });
   });
 
   describe("Capital stack state (Phase 5)", () => {
-    it("updates LP Vault NAV in capital stack", () => { expect(true).to.equal(true); });
-    it("tracks drawdown in capital stack", () => { expect(true).to.equal(true); });
+    it("updates LP Vault NAV in capital stack", () => {
+      expect(true).to.equal(true);
+    });
+    it("tracks drawdown in capital stack", () => {
+      expect(true).to.equal(true);
+    });
   });
 
   describe("Access control (Phase 5)", () => {
-    it("only authorized caller can process batch", () => { expect(true).to.equal(true); });
+    it("only authorized caller can process batch", () => {
+      expect(true).to.equal(true);
+    });
   });
 
   // ============================================================
@@ -439,7 +477,7 @@ describe("VaultBatchFlow Integration", () => {
 
       const price = await proxy.getVaultPrice();
       const peak = await proxy.getVaultPricePeak();
-      const drawdown = WAD - (price * WAD / peak);
+      const drawdown = WAD - (price * WAD) / peak;
 
       expect(drawdown).to.be.gte(0n);
       expect(drawdown).to.be.lte(WAD);

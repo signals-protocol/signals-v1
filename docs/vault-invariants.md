@@ -304,3 +304,4 @@ F_LP + F_BS + F_TR = F_pool  (잔여 수수료 풀 완전 분배)
 | `InvalidFeeRatios()`           | `ϕ_LP + ϕ_BS + ϕ_TR != 1e18`              |
 | `ZeroPriceNotAllowed()`        | `price == 0` in operations                |
 
+

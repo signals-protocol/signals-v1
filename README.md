@@ -4,7 +4,7 @@ Modular on-chain architecture for the Signals prediction market protocol, built 
 
 ## Current Status
 
-**Phase 3 Complete** — v0 parity achieved with modular architecture.
+**Phase 4 Complete** — Vault accounting spine implemented with full test coverage.
 
 | Component               | Status | Description                                        |
 | ----------------------- | ------ | -------------------------------------------------- |
@@ -13,9 +13,11 @@ Modular on-chain architecture for the Signals prediction market protocol, built 
 | `MarketLifecycleModule` | ✅     | Market creation, settlement, timing updates        |
 | `OracleModule`          | ✅     | Settlement price feed with signature verification  |
 | `SignalsPosition`       | ✅     | ERC721 position NFT with market indexing           |
+| `LPVaultModule`         | ✅     | Deposit/withdraw queue, daily batch processing     |
+| `VaultAccountingLib`    | ✅     | NAV, price, peak, drawdown calculations            |
 | `LazyMulSegmentTree`    | ✅     | O(log n) range queries for CLMSR distribution      |
 
-**56 tests passing** — SDK parity, fuzz, stress, slippage, settlement chunks, access control.
+**396 tests passing** — SDK parity, fuzz, stress, invariants, vault batch flow, security.
 
 ### Progress
 
@@ -23,8 +25,8 @@ Modular on-chain architecture for the Signals prediction market protocol, built 
 - [x] Phase 1: Storage / Interface design
 - [x] Phase 2: Core + module scaffolding
 - [x] Phase 3: v0 logic porting (Trade, Lifecycle, Oracle, Position)
-- [ ] Phase 4: Risk module hooks
-- [ ] Phase 5: LP Vault / Backstop integration
+- [x] Phase 4: Vault accounting spine (VaultAccountingLib, LPVaultModule)
+- [ ] Phase 5: LP Vault / Backstop / Fee Waterfall integration
 - [ ] Phase 6: Mainnet preparation
 
 ## Architecture
@@ -37,17 +39,13 @@ Modular on-chain architecture for the Signals prediction market protocol, built 
 │  - Access control (Ownable, Pausable, ReentrancyGuard)      │
 └─────────────────────────────────────────────────────────────┘
                               │
-        ┌─────────────────────┼─────────────────────┐
-        ▼                     ▼                     ▼
-┌───────────────┐   ┌─────────────────────┐   ┌─────────────┐
-│  TradeModule  │   │ MarketLifecycleModule │  │ OracleModule │
-│  - openPosition   │  - createMarket       │  │ - submitPrice │
-│  - increasePosition│ - settleMarket       │  │ - getSettlement│
-│  - decreasePosition│ - requestSettlement  │  └─────────────┘
-│  - closePosition  │    Chunks             │
-│  - claimPayout    └─────────────────────┘
-│  - calculate*     │
-└───────────────────┘
+    ┌─────────────┬───────────┼───────────┬─────────────┐
+    ▼             ▼           ▼           ▼             ▼
+┌─────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐ ┌───────────┐
+│ Trade   │ │ Lifecycle│ │ Oracle  │ │ LPVault │ │ Risk      │
+│ Module  │ │ Module   │ │ Module  │ │ Module  │ │ Module    │
+│ (v1)    │ │ (v1)     │ │ (v1)    │ │ (v0.1)  │ │ (Phase 5) │
+└─────────┘ └──────────┘ └─────────┘ └─────────┘ └───────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
 │                    SignalsPosition (ERC721)                 │
@@ -70,7 +68,10 @@ signals-v1/
 │   ├── modules/
 │   │   ├── TradeModule.sol              # Trade execution
 │   │   ├── MarketLifecycleModule.sol    # Market management
-│   │   └── OracleModule.sol             # Settlement oracle
+│   │   ├── OracleModule.sol             # Settlement oracle
+│   │   └── LPVaultModule.sol            # Vault operations
+│   ├── vault/
+│   │   └── lib/VaultAccountingLib.sol   # Vault math
 │   ├── position/
 │   │   ├── SignalsPosition.sol          # ERC721 position token
 │   │   └── SignalsPositionStorage.sol
@@ -83,11 +84,30 @@ signals-v1/
 │   └── harness/                         # Test helpers
 ├── test/
 │   ├── unit/                            # Module-level tests
+│   │   ├── lib/                         # Library tests
+│   │   ├── position/                    # Position tests
+│   │   └── vault/                       # Vault tests
+│   ├── module/                          # Single module tests
+│   │   ├── access/                      # Upgrade/access guards
+│   │   ├── lifecycle/                   # Market lifecycle
+│   │   ├── oracle/                      # Oracle tests
+│   │   └── trade/                       # Trade validation
 │   ├── integration/                     # Cross-module flows
-│   └── e2e/
+│   │   ├── core/                        # Boundaries, events
+│   │   ├── lifecycle/                   # Lifecycle flow
+│   │   ├── settlement/                  # Settlement chunks
+│   │   ├── trade/                       # Trade flows
+│   │   └── vault/                       # Vault batch flow
+│   ├── invariant/                       # Math invariants
+│   ├── parity/                          # v0 SDK parity
+│   ├── security/                        # Access control
+│   └── e2e/                             # End-to-end (Phase 5)
+│       └── vault/
 ├── docs/
-│   └── phase3/clmsr-invariants.md
-└── plan.md                              # Full migration plan
+│   ├── phase3/clmsr-invariants.md
+│   └── vault-invariants.md              # Vault accounting spec
+├── plan.md                              # Full migration plan
+└── whitepaper.tex                       # Protocol specification
 ```
 
 ## Getting Started
@@ -97,29 +117,49 @@ signals-v1/
 yarn install
 
 # Compile contracts
-yarn compile
+npx hardhat compile
 
 # Run tests
-yarn test
+npx hardhat test
 
-# Run specific test file
-yarn test test/integration/tradeModule.flow.test.ts
+# Run specific test suite
+npx hardhat test test/integration/vault/VaultBatchFlow.spec.ts
 ```
 
 ## Key Design Decisions
 
 1. **Thin Core + Delegate Modules** — Core holds storage and routes to modules via delegatecall. Modules can be upgraded independently.
 
-2. **24KB Size Limit** — Heavy logic in modules, not Core. Trade/Lifecycle can be split further if needed.
+2. **24KB Size Limit** — Heavy logic in modules, not Core. Trade/Lifecycle/Vault can be split further if needed.
 
 3. **Clean Storage Layout** — v1 canonical layout with gaps for future upgrades. No legacy fields from v0.
 
-4. **SDK Parity** — On-chain calculations match v0 SDK within ≤1 μUSDC tolerance.
+4. **SDK Parity** — On-chain calculations match v0 SDK within ≤1 wei tolerance.
+
+5. **Whitepaper-Driven** — All vault accounting follows whitepaper Section 3 formulas exactly.
+
+## Vault Accounting (Phase 4)
+
+Implements whitepaper Section 3 batch accounting:
+
+```
+N^pre_t = N_{t-1} + Π_t     (pre-batch NAV)
+P^e_t = N^pre_t / S_{t-1}   (batch price)
+DD_t = 1 - P_t / P^peak_t   (drawdown)
+```
+
+Key invariants tested:
+
+- Price preservation: |N'/S' - P| ≤ 1 wei after deposit/withdraw
+- Peak monotonicity: P^peak*t ≥ P^peak*{t-1}
+- Drawdown range: 0 ≤ DD_t ≤ 100%
 
 ## Documentation
 
 - [plan.md](./plan.md) — Detailed architecture and migration plan
+- [docs/vault-invariants.md](./docs/vault-invariants.md) — Vault accounting spec
 - [docs/phase3/clmsr-invariants.md](./docs/phase3/clmsr-invariants.md) — CLMSR math invariants
+- [test/TESTING.md](./test/TESTING.md) — Test architecture conventions
 
 ## License
 

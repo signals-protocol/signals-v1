@@ -17,12 +17,12 @@ export async function upgradeAction(env: Environment) {
   const coreFactory = await ethers.getContractFactory("SignalsCore");
   const upgradedCore = await upgrades.upgradeProxy(coreProxyAddr, coreFactory, { kind: "uups" });
   await upgradedCore.waitForDeployment();
-  const newCoreImpl = await upgrades.erc1967.getImplementationAddress(upgradedCore.target);
+  const newCoreImpl = await upgrades.erc1967.getImplementationAddress(await upgradedCore.getAddress());
 
   const positionFactory = await ethers.getContractFactory("SignalsPosition");
   const upgradedPosition = await upgrades.upgradeProxy(positionProxyAddr, positionFactory, { kind: "uups" });
   await upgradedPosition.waitForDeployment();
-  const newPositionImpl = await upgrades.erc1967.getImplementationAddress(upgradedPosition.target);
+  const newPositionImpl = await upgrades.erc1967.getImplementationAddress(await upgradedPosition.getAddress());
 
   updateContracts(env, {
     SignalsCoreImplementation: newCoreImpl,

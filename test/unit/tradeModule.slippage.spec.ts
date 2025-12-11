@@ -1,10 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
 import {
-  MockPaymentToken,
-  MockFeePolicy,
-  TradeModuleProxy,
-  TradeModule,
   SignalsPosition,
   TestERC1967Proxy,
 } from "../../typechain-types";

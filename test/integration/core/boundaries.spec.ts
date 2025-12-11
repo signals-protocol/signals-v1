@@ -1,9 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
-import {
-  time,
-  loadFixture,
-} from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import {
   MockPaymentToken,
@@ -556,7 +553,7 @@ describe("Boundaries", () => {
   // ============================================================
   describe("Market State Boundaries", () => {
     it("reverts trade on inactive market", async () => {
-      const { core, user, owner } = await loadFixture(deployBoundaryFixture);
+      const { core, user } = await loadFixture(deployBoundaryFixture);
 
       const now = (await ethers.provider.getBlock("latest"))!.timestamp;
       const market: ISignalsCore.MarketStruct = {

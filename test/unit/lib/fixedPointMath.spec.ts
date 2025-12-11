@@ -2,7 +2,12 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { deployFixedPointMathTest } from "../../helpers/deploy";
-import { WAD, HALF_WAD, TWO_WAD, DEFAULT_TOLERANCE, LOOSE_TOLERANCE } from "../../helpers/constants";
+import {
+  WAD,
+  HALF_WAD,
+  TWO_WAD,
+  LOOSE_TOLERANCE,
+} from "../../helpers/constants";
 import { approx, createPrng } from "../../helpers/utils";
 
 describe("FixedPointMathU", () => {
@@ -262,14 +267,14 @@ describe("FixedPointMathU", () => {
     it("a * b / b ≈ a for random values", async () => {
       const { test } = await loadFixture(deployFixture);
       const prng = createPrng(12345n);
-      
+
       for (let i = 0; i < 10; i++) {
         const a = prng.nextInRange(WAD / 10n, WAD * 100n);
         const b = prng.nextInRange(WAD / 10n, WAD * 100n);
-        
+
         const product = await test.wMul(a, b);
         const back = await test.wDiv(product, b);
-        
+
         // Allow 1 wei tolerance for rounding
         approx(back, a, 2n);
       }
@@ -279,7 +284,7 @@ describe("FixedPointMathU", () => {
   describe("Property: exp/ln roundtrip", () => {
     it("ln(exp(x)) ≈ x for small x", async () => {
       const { test } = await loadFixture(deployFixture);
-      
+
       // Note: v1 uses Taylor series (not PRB-math) for exp/ln.
       // Tolerance aligned with clmsrParity.test.ts: ~1e-6 WAD
       // See: SAFE_EXP_TOLERANCE in clmsrParity.test.ts
@@ -288,7 +293,7 @@ describe("FixedPointMathU", () => {
         ethers.parseEther("0.5"),
         ethers.parseEther("1"),
       ];
-      
+
       for (const x of testValues) {
         const expX = await test.wExp(x);
         const lnExpX = await test.wLn(expX);
@@ -300,7 +305,7 @@ describe("FixedPointMathU", () => {
 
     it("exp(ln(x)) ≈ x for x > 1 (CLMSR typical range)", async () => {
       const { test } = await loadFixture(deployFixture);
-      
+
       // CLMSR primarily uses ln for ratios > 1 (Z_after > Z_before)
       // Taylor series precision degrades for larger x
       // Typical CLMSR ratios are 1.0 ~ 2.0 range
@@ -309,7 +314,7 @@ describe("FixedPointMathU", () => {
         ethers.parseEther("1.5"),
         ethers.parseEther("2"),
       ];
-      
+
       for (const x of testValues) {
         const lnX = await test.wLn(x);
         const expLnX = await test.wExp(lnX);
@@ -336,4 +341,3 @@ describe("FixedPointMathU", () => {
     });
   });
 });
-

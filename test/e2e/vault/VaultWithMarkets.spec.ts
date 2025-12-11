@@ -1,18 +1,14 @@
-import { expect } from "chai";
-import { ethers } from "hardhat";
-import { WAD, ONE_DAY } from "../../helpers/constants";
+// import { expect } from "chai"; // Will be used in Phase 5
 
 /**
- * VaultWithMarkets E2E Tests (Phase 4-0 Skeleton)
+ * VaultWithMarkets E2E Tests (Phase 5 Skeleton)
  *
  * Target: Full system - Vault + Markets + Settlement + P&L flow
  * Reference: docs/vault-invariants.md
  *
- * Tests the complete lifecycle:
- * Market creation → Trading → Settlement → P&L → Vault batch
+ * These tests require Market-Vault integration which is Phase 5 scope.
+ * Currently placeholder tests documenting expected behavior.
  */
-
-const DAY = ONE_DAY;
 
 describe("VaultWithMarkets E2E", () => {
   // ============================================================
