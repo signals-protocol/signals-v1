@@ -7,6 +7,7 @@ interface ISignalsCore {
         bool isActive;
         bool settled;
         bool snapshotChunksDone;
+        bool failed; // Phase 7: oracle failure marked
         uint32 numBins;
         uint32 openPositionCount;
         uint32 snapshotChunkCursor;
@@ -14,7 +15,8 @@ interface ISignalsCore {
         // timing
         uint64 startTimestamp;
         uint64 endTimestamp;
-        uint64 settlementTimestamp;
+        uint64 settlementTimestamp; // Market day key (based on endTimestamp)
+        uint64 settlementFinalizedAt; // Actual finalization timestamp
 
         // ticks / math
         int256 minTick;
@@ -121,6 +123,17 @@ interface ISignalsCore {
     ) external;
 
     function setOracleConfig(address signer) external;
+
+    /// @notice Mark a market as failed due to oracle not providing valid settlement
+    /// @dev Can only be called after settlement window expires without valid candidate
+    function markFailed(uint256 marketId) external;
+
+    /// @notice Manually settle a failed market (secondary settlement path)
+    /// @dev Can only be called by ops on a failed market
+    function manualSettleFailedMarket(
+        uint256 marketId,
+        int256 settlementValue
+    ) external;
 
     /// @notice Returns the settlement price candidate for a market
     /// @dev This is a simple getter for the most recent candidate, not a historical lookup

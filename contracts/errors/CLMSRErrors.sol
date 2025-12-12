@@ -15,6 +15,9 @@ interface CLMSRErrors {
     error SettlementFinalizeWindowClosed(uint64 requiredTimestamp, uint64 currentTimestamp);
     error SettlementOracleCandidateMissing();
     error SettlementOracleSignatureInvalid(address signer);
+    error MarketNotFailed(uint256 marketId);
+    error MarketAlreadyFailed(uint256 marketId);
+    error SettlementWindowNotExpired(uint64 deadline, uint64 currentTime);
 
     /* Trade params */
     error InvalidTick(int256 tick, int256 minTick, int256 maxTick);
@@ -87,6 +90,9 @@ library CE {
     error SettlementFinalizeWindowClosed(uint64 requiredTimestamp, uint64 currentTimestamp);
     error SettlementOracleCandidateMissing();
     error SettlementOracleSignatureInvalid(address signer);
+    error MarketNotFailed(uint256 marketId);
+    error MarketAlreadyFailed(uint256 marketId);
+    error SettlementWindowNotExpired(uint64 deadline, uint64 currentTime);
 
     /* Trade params */
     error InvalidTick(int256 tick, int256 minTick, int256 maxTick);

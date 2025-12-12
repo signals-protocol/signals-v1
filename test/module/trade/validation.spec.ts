@@ -6,12 +6,14 @@ type MarketStruct = {
   isActive: boolean;
   settled: boolean;
   snapshotChunksDone: boolean;
+  failed: boolean;
   numBins: number;
   openPositionCount: number;
   snapshotChunkCursor: number;
   startTimestamp: bigint;
   endTimestamp: bigint;
   settlementTimestamp: bigint;
+  settlementFinalizedAt: bigint | number;
   minTick: number;
   maxTick: number;
   tickSpacing: number;
@@ -32,12 +34,14 @@ function buildMarket(
     isActive: true,
     settled: false,
     snapshotChunksDone: false,
+    failed: false,
     numBins: numBins,
     openPositionCount: 0,
     snapshotChunkCursor: 0,
     startTimestamp: baseTime - 10n,
     endTimestamp: baseTime + 1_000n,
-    settlementTimestamp: baseTime + 1_000n,
+    settlementTimestamp: baseTime + 1_100n,
+    settlementFinalizedAt: 0,
     minTick: 0,
     maxTick: 4,
     tickSpacing: 1,

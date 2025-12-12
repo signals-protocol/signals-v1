@@ -134,8 +134,8 @@ describe("Lifecycle + Trade integration", () => {
     let market = await core.markets(marketId);
     expect(market.openPositionCount).to.equal(1);
 
-    // submit oracle price after market end
-    const priceTimestamp = end + 5n;
+    // submit oracle price after settlementTimestamp (Tset)
+    const priceTimestamp = settlementTs + 5n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
     const digest = buildDigest(chainId, await core.getAddress(), marketId, 2n, priceTimestamp);
     const signature = await oracleSigner.signMessage(ethers.getBytes(digest));
@@ -191,7 +191,8 @@ describe("Lifecycle + Trade integration", () => {
     const pos2 = Number(pos1) + 1; // loser (upper range)
     await core.connect(user).openPosition(1, 3, 4, 1_000, 5_000_000);
 
-    const priceTimestamp = end + 5n;
+    // priceTimestamp must be >= Tset (settlementTs)
+    const priceTimestamp = settlementTs + 5n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
     const digest = buildDigest(chainId, await core.getAddress(), 1, 1n, priceTimestamp);
     const signature = await oracleSigner.signMessage(ethers.getBytes(digest));
@@ -239,8 +240,8 @@ describe("Lifecycle + Trade integration", () => {
     // settlement too early
     await expect(core.settleMarket(1)).to.be.reverted;
 
-    // submit settlement and settle within window
-    const priceTimestamp = end + 10n;
+    // submit settlement and settle within window (priceTimestamp >= Tset)
+    const priceTimestamp = settlementTs + 10n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
     const digest = buildDigest(chainId, await core.getAddress(), 1, 1n, priceTimestamp);
     const sig = await oracleSigner.signMessage(ethers.getBytes(digest));

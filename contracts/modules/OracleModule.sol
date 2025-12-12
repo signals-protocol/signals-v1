@@ -42,10 +42,14 @@ contract OracleModule is SignalsCoreStorage {
         if (market.numBins == 0) revert CE.MarketNotFound(marketId);
         if (market.settled) revert CE.MarketAlreadySettled(marketId);
 
-        uint64 endTs = market.endTimestamp;
-        if (priceTimestamp < endTs) revert CE.SettlementTooEarly(endTs, priceTimestamp);
-        if (priceTimestamp > endTs + settlementSubmitWindow) {
-            revert CE.SettlementFinalizeWindowClosed(endTs + settlementSubmitWindow, priceTimestamp);
+        // Tset = settlementTimestamp (the reference time for settlement)
+        // startTimestamp < endTimestamp < settlementTimestamp
+        uint64 tSet = market.settlementTimestamp;
+        
+        // Price timestamp must be within [tSet, tSet + submitWindow]
+        if (priceTimestamp < tSet) revert CE.SettlementTooEarly(tSet, priceTimestamp);
+        if (priceTimestamp > tSet + settlementSubmitWindow) {
+            revert CE.SettlementFinalizeWindowClosed(tSet + settlementSubmitWindow, priceTimestamp);
         }
         if (priceTimestamp > block.timestamp) {
             revert CE.SettlementTooEarly(priceTimestamp, uint64(block.timestamp));
@@ -56,11 +60,30 @@ contract OracleModule is SignalsCoreStorage {
             revert CE.SettlementOracleSignatureInvalid(recovered);
         }
 
-        settlementOracleState[marketId] = SettlementOracleState({
-            candidateValue: settlementValue,
-            candidatePriceTimestamp: priceTimestamp
-        });
-        emit SettlementPriceSubmitted(marketId, settlementValue, priceTimestamp, recovered);
+        // Closest-sample rule per whitepaper Section 6:
+        // Only update candidate if new sample is strictly closer to Tset.
+        // On tie (equal distance), keep existing candidate (prefer earlier submission).
+        SettlementOracleState storage state = settlementOracleState[marketId];
+        
+        if (state.candidatePriceTimestamp == 0) {
+            // No existing candidate, accept new one
+            state.candidateValue = settlementValue;
+            state.candidatePriceTimestamp = priceTimestamp;
+            emit SettlementPriceSubmitted(marketId, settlementValue, priceTimestamp, recovered);
+        } else {
+            // Compare distances to Tset
+            // Both timestamps are >= tSet due to validation above
+            uint64 existingDistance = state.candidatePriceTimestamp - tSet;
+            uint64 newDistance = priceTimestamp - tSet;
+            
+            // Only update if strictly closer (< not <=)
+            if (newDistance < existingDistance) {
+                state.candidateValue = settlementValue;
+                state.candidatePriceTimestamp = priceTimestamp;
+                emit SettlementPriceSubmitted(marketId, settlementValue, priceTimestamp, recovered);
+            }
+            // If equal or farther, silently ignore (existing candidate preferred)
+        }
     }
 
     /// @notice Returns the settlement price candidate for a market

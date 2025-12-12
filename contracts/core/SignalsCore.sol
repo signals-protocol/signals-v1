@@ -222,6 +222,21 @@ contract SignalsCore is
         _delegate(lifecycleModule, abi.encodeWithSignature("settleMarket(uint256)", marketId));
     }
 
+    function markFailed(uint256 marketId) external override onlyOwner whenNotPaused {
+        _delegate(lifecycleModule, abi.encodeWithSignature("markFailed(uint256)", marketId));
+    }
+
+    function manualSettleFailedMarket(
+        uint256 marketId,
+        int256 settlementValue
+    ) external override onlyOwner whenNotPaused {
+        _delegate(lifecycleModule, abi.encodeWithSignature(
+            "manualSettleFailedMarket(uint256,int256)",
+            marketId,
+            settlementValue
+        ));
+    }
+
     function reopenMarket(uint256 marketId) external override onlyOwner whenNotPaused {
         _delegate(lifecycleModule, abi.encodeWithSignature("reopenMarket(uint256)", marketId));
     }

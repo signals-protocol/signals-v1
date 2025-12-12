@@ -32,6 +32,13 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         uint256 ftot
     );
     event MarketReopened(uint256 indexed marketId);
+    event MarketFailed(uint256 indexed marketId, uint64 timestamp);
+    event MarketSettledSecondary(
+        uint256 indexed marketId,
+        int256 settlementValue,
+        int256 settlementTick,
+        uint64 settlementFinalizedAt
+    );
     event MarketActivationUpdated(uint256 indexed marketId, bool isActive);
     event MarketTimingUpdated(
         uint256 indexed marketId,
@@ -110,21 +117,29 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         ISignalsCore.Market storage market = markets[marketId];
         if (!_marketExists(marketId)) revert CE.MarketNotFound(marketId);
         if (market.settled) revert CE.MarketAlreadySettled(marketId);
+        if (market.failed) revert CE.MarketAlreadyFailed(marketId);
 
         SettlementOracleState storage state = settlementOracleState[marketId];
         if (state.candidatePriceTimestamp == 0) revert CE.SettlementOracleCandidateMissing();
 
-        uint64 endTs = market.endTimestamp;
-        if (uint64(block.timestamp) < endTs) {
-            revert CE.SettlementTooEarly(endTs, uint64(block.timestamp));
+        // Tset = settlementTimestamp (market creation time parameter)
+        // startTimestamp < endTimestamp < settlementTimestamp
+        uint64 tSet = market.settlementTimestamp;
+        
+        // Can only settle after Tset
+        if (uint64(block.timestamp) < tSet) {
+            revert CE.SettlementTooEarly(tSet, uint64(block.timestamp));
         }
-        if (state.candidatePriceTimestamp < endTs) {
-            revert CE.SettlementTooEarly(endTs, state.candidatePriceTimestamp);
+        
+        // Candidate must be from valid window [Tset, Tset + submitWindow]
+        if (state.candidatePriceTimestamp < tSet) {
+            revert CE.SettlementTooEarly(tSet, state.candidatePriceTimestamp);
         }
-        if (state.candidatePriceTimestamp > endTs + settlementSubmitWindow) {
-            revert CE.SettlementFinalizeWindowClosed(endTs + settlementSubmitWindow, state.candidatePriceTimestamp);
+        if (state.candidatePriceTimestamp > tSet + settlementSubmitWindow) {
+            revert CE.SettlementFinalizeWindowClosed(tSet + settlementSubmitWindow, state.candidatePriceTimestamp);
         }
 
+        // Must finalize within deadline from candidate submission
         uint64 finalizeDeadlineTs = state.candidatePriceTimestamp + settlementFinalizeDeadline;
         if (uint64(block.timestamp) > finalizeDeadlineTs) {
             revert CE.SettlementFinalizeWindowClosed(finalizeDeadlineTs, uint64(block.timestamp));
@@ -135,7 +150,9 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         market.settled = true;
         market.settlementValue = state.candidateValue;
         market.settlementTick = settlementTick;
-        market.settlementTimestamp = uint64(block.timestamp);
+        // settlementTimestamp stays as-is (market day key set at creation)
+        // settlementFinalizedAt records when settlement tx was mined
+        market.settlementFinalizedAt = uint64(block.timestamp);
         market.isActive = false;
         market.snapshotChunkCursor = 0;
         market.snapshotChunksDone = (market.openPositionCount == 0);
@@ -145,24 +162,98 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         state.candidatePriceTimestamp = 0;
 
         // Phase 6: Record P&L to daily batch
-        // Batch ID is based on settlement timestamp (day granularity)
+        // Batch ID is based on settlementTimestamp for deterministic day assignment
         uint64 batchId = _getBatchIdForMarket(marketId);
         (int256 lt, uint256 ftot) = _calculateMarketPnl(marketId);
         _recordPnlToBatch(batchId, lt, ftot);
         
         emit MarketPnlRecorded(marketId, batchId, lt, ftot);
-        emit MarketSettled(marketId, market.settlementValue, settlementTick, market.settlementTimestamp);
+        emit MarketSettled(marketId, market.settlementValue, settlementTick, market.settlementFinalizedAt);
+    }
+
+    /**
+     * @notice Mark a market as failed due to oracle not providing valid settlement
+     * @dev Can only be called after settlement window expires without valid candidate
+     * @param marketId Market to mark as failed
+     */
+    function markFailed(uint256 marketId) external onlyDelegated {
+        ISignalsCore.Market storage market = markets[marketId];
+        if (!_marketExists(marketId)) revert CE.MarketNotFound(marketId);
+        if (market.settled) revert CE.MarketAlreadySettled(marketId);
+        if (market.failed) revert CE.MarketAlreadyFailed(marketId);
+
+        // Tset = settlementTimestamp
+        uint64 tSet = market.settlementTimestamp;
+        uint64 deadline = tSet + settlementSubmitWindow + settlementFinalizeDeadline;
+
+        // Can only mark failed after full settlement window has expired
+        if (uint64(block.timestamp) <= deadline) {
+            revert CE.SettlementWindowNotExpired(deadline, uint64(block.timestamp));
+        }
+
+        // Check if there's no valid candidate OR candidate expired
+        SettlementOracleState storage state = settlementOracleState[marketId];
+        bool hasValidCandidate = state.candidatePriceTimestamp != 0 &&
+            state.candidatePriceTimestamp >= tSet &&
+            state.candidatePriceTimestamp <= tSet + settlementSubmitWindow;
+
+        if (hasValidCandidate) {
+            // There's a valid candidate - should use settleMarket instead
+            revert CE.SettlementOracleCandidateMissing(); // Misleading but indicates "use settleMarket"
+        }
+
+        market.failed = true;
+        market.isActive = false;
+
+        emit MarketFailed(marketId, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Manually settle a failed market (secondary settlement path)
+     * @dev Can only be called on a failed market. Ops provides settlement value.
+     * @param marketId Market to settle
+     * @param settlementValue The settlement value (ops-determined)
+     */
+    function manualSettleFailedMarket(
+        uint256 marketId,
+        int256 settlementValue
+    ) external onlyDelegated {
+        ISignalsCore.Market storage market = markets[marketId];
+        if (!_marketExists(marketId)) revert CE.MarketNotFound(marketId);
+        if (market.settled) revert CE.MarketAlreadySettled(marketId);
+        if (!market.failed) revert CE.MarketNotFailed(marketId);
+
+        int256 settlementTick = _toSettlementTick(market, settlementValue);
+
+        market.settled = true;
+        market.settlementValue = settlementValue;
+        market.settlementTick = settlementTick;
+        market.settlementTimestamp = market.endTimestamp; // Market day key
+        market.settlementFinalizedAt = uint64(block.timestamp);
+        market.snapshotChunkCursor = 0;
+        market.snapshotChunksDone = (market.openPositionCount == 0);
+
+        // Record P&L to daily batch
+        uint64 batchId = _getBatchIdForMarket(marketId);
+        (int256 lt, uint256 ftot) = _calculateMarketPnl(marketId);
+        _recordPnlToBatch(batchId, lt, ftot);
+
+        emit MarketPnlRecorded(marketId, batchId, lt, ftot);
+        emit MarketSettledSecondary(marketId, settlementValue, settlementTick, market.settlementFinalizedAt);
     }
 
     function reopenMarket(uint256 marketId) external onlyDelegated {
         ISignalsCore.Market storage market = markets[marketId];
         if (!_marketExists(marketId)) revert CE.MarketNotFound(marketId);
-        if (!market.settled) revert CE.MarketNotSettled(marketId);
+        // Can reopen either settled or failed markets
+        if (!market.settled && !market.failed) revert CE.MarketNotSettled(marketId);
 
         market.settled = false;
+        market.failed = false;
         market.settlementValue = 0;
         market.settlementTick = 0;
         market.settlementTimestamp = 0;
+        market.settlementFinalizedAt = 0;
         market.isActive = true;
         market.snapshotChunkCursor = 0;
         market.snapshotChunksDone = false;

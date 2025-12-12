@@ -72,7 +72,8 @@ describe("Settlement chunks and claim totals", () => {
     const now = BigInt(await time.latest());
     const start = now - 10n;
     const end = now + 100n;
-    await core.createMarket(0, 4, 1, Number(start), Number(end), Number(end + 10n), 4, WAD, ethers.ZeroAddress);
+    const settleTs = end + 10n;
+    await core.createMarket(0, 4, 1, Number(start), Number(end), Number(settleTs), 4, WAD, ethers.ZeroAddress);
 
     // open positions: 3 users, 4 positions -> ensure openPositionCount drives multiple chunks
     await core.connect(u1).openPosition(1, 0, 2, 1_000, 10_000_000); // winning
@@ -84,7 +85,8 @@ describe("Settlement chunks and claim totals", () => {
     expect(openCount).to.equal(4);
 
     // settle with settlementTick = 1 (wins positions that include bin 1)
-    const priceTimestamp = end + 5n;
+    // priceTimestamp must be >= Tset (settlementTimestamp)
+    const priceTimestamp = settleTs + 5n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
     const digest = ethers.keccak256(
       ethers.AbiCoder.defaultAbiCoder().encode(

@@ -67,12 +67,14 @@ describe("OracleModule", () => {
       isActive: true,
       settled: false,
       snapshotChunksDone: false,
+      failed: false,
       numBins: 4,
       openPositionCount: 0,
       snapshotChunkCursor: 0,
       startTimestamp: now - 100n,
       endTimestamp: now + 200n,
-      settlementTimestamp: now + 200n,
+      settlementTimestamp: now + 300n,
+      settlementFinalizedAt: 0,
       minTick: 0,
       maxTick: 4,
       tickSpacing: 1,
@@ -101,7 +103,8 @@ describe("OracleModule", () => {
   it("records candidate price with valid signature and window", async () => {
     const { core, oracleModule, oracleSigner, chainId, market } = await setup();
     const oracleEvents = oracleModule.attach(await core.getAddress());
-    const priceTimestamp = BigInt(market.endTimestamp) + 10n;
+    // Tset = settlementTimestamp, priceTimestamp must be >= Tset
+    const priceTimestamp = BigInt(market.settlementTimestamp) + 10n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
 
     const digest = buildDigest(chainId, await core.getAddress(), 1, 2n, priceTimestamp);
@@ -118,7 +121,8 @@ describe("OracleModule", () => {
 
   it("reverts on invalid signer", async () => {
     const { core, oracleModule, other, chainId, market } = await setup();
-    const priceTimestamp = BigInt(market.endTimestamp) + 5n;
+    // Tset = settlementTimestamp
+    const priceTimestamp = BigInt(market.settlementTimestamp) + 5n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
 
     const digest = buildDigest(chainId, await core.getAddress(), 1, 3n, priceTimestamp);
@@ -131,7 +135,8 @@ describe("OracleModule", () => {
 
   it("enforces submit window bounds", async () => {
     const { core, oracleModule, oracleSigner, chainId, market } = await setup();
-    const tooEarlyTs = BigInt(market.endTimestamp) - 1n;
+    // Tset = settlementTimestamp, price before Tset should revert
+    const tooEarlyTs = BigInt(market.settlementTimestamp) - 1n;
     await time.setNextBlockTimestamp(Number(tooEarlyTs + 1n));
     const earlyDigest = buildDigest(chainId, await core.getAddress(), 1, 1n, tooEarlyTs);
     const earlySig = await oracleSigner.signMessage(ethers.getBytes(earlyDigest));
@@ -141,7 +146,8 @@ describe("OracleModule", () => {
       "SettlementTooEarly"
     );
 
-    const lateTs = BigInt(market.endTimestamp) + 121n; // submitWindow = 120
+    // submitWindow = 120, price after Tset + 120 should revert
+    const lateTs = BigInt(market.settlementTimestamp) + 121n;
     await time.setNextBlockTimestamp(Number(lateTs + 1n));
     const lateDigest = buildDigest(chainId, await core.getAddress(), 1, 1n, lateTs);
     const lateSig = await oracleSigner.signMessage(ethers.getBytes(lateDigest));
