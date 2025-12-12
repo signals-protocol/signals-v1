@@ -64,7 +64,9 @@ describe("LP Vault Scenarios", () => {
     const fixture = await deployVaultFixture();
     const { proxy, userA } = fixture;
     await proxy.connect(userA).seedVault(ethers.parseEther("10000"));
-    return fixture;
+    const currentBatchId = await proxy.getCurrentBatchId();
+    const firstBatchId = currentBatchId + 1n;
+    return { ...fixture, currentBatchId, firstBatchId };
   }
 
   // ============================================================
@@ -80,9 +82,13 @@ describe("LP Vault Scenarios", () => {
      * Verify: NAV tracks correctly, claims work, price reflects P&L
      */
     it("completes full 3-day deposit/trade/withdraw cycle", async () => {
-      const { proxy, userA, userB, userC } = await loadFixture(
+      const { proxy, userA, userB, userC, firstBatchId } = await loadFixture(
         deploySeededVaultFixture
       );
+      const day1 = firstBatchId;
+      const day2 = day1 + 1n;
+      const day3 = day1 + 2n;
+      const day4 = day1 + 3n;
 
       // Initial state
       expect(await proxy.getVaultNav()).to.equal(ethers.parseEther("10000"));
@@ -93,8 +99,8 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userB).requestDeposit(ethers.parseEther("1000"));
 
       // Market profit: L = +500
-      await proxy.recordDailyPnl(1n, ethers.parseEther("500"), 0n);
-      await proxy.processDailyBatch(1n);
+      await proxy.recordDailyPnl(day1, ethers.parseEther("500"), 0n);
+      await proxy.processDailyBatch(day1);
 
       // userB claims deposit
       await proxy.connect(userB).claimDeposit(0n);
@@ -115,8 +121,8 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userC).requestDeposit(ethers.parseEther("2000"));
 
       // Market loss: L = -200, Fees: F = 100
-      await proxy.recordDailyPnl(2n, ethers.parseEther("-200"), ethers.parseEther("100"));
-      await proxy.processDailyBatch(2n);
+      await proxy.recordDailyPnl(day2, ethers.parseEther("-200"), ethers.parseEther("100"));
+      await proxy.processDailyBatch(day2);
 
       await proxy.connect(userC).claimDeposit(1n);
 
@@ -129,19 +135,16 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userA).requestWithdraw(ethers.parseEther("1000"));
 
       // Market profit: L = +300
-      await proxy.recordDailyPnl(3n, ethers.parseEther("300"), 0n);
-      await proxy.processDailyBatch(3n);
+      await proxy.recordDailyPnl(day3, ethers.parseEther("300"), 0n);
+      await proxy.processDailyBatch(day3);
 
-      // D_lag = 1, so userA's withdraw is eligible at batch 3
-      // But they requested in batch 2, eligible at batch 3
-      // Actually: requested in Day 3 (batch 3), eligible at batch 3+1+1 = 5
-      // Wait, D_lag changes when they request
-      // Let me recalculate: currentBatchId = 2 when requesting
-      // eligibleBatchId = 2 + 1 + 1 = 4
+      // D_lag = 1, withdraw request is eligible at (currentBatchId + 1 + D_lag)
+      // Here, request was created after Day 2 was processed, so currentBatchId = day2.
+      // eligibleBatchId = day2 + 1 + 1 = day4.
 
-      // Process batch 4 for withdrawal to be claimable
-      await proxy.recordDailyPnl(4n, 0n, 0n);
-      await proxy.processDailyBatch(4n);
+      // Process Day 4 for withdrawal to be claimable
+      await proxy.recordDailyPnl(day4, 0n, 0n);
+      await proxy.processDailyBatch(day4);
 
       await proxy.connect(userA).claimWithdraw(0n);
 
@@ -168,7 +171,8 @@ describe("LP Vault Scenarios", () => {
      * Verify: Grant limits loss, backstop NAV decreases, LP protected
      */
     it("backstop grant protects LP from excessive drawdown", async () => {
-      const { proxy } = await loadFixture(deploySeededVaultFixture);
+      const { proxy, firstBatchId } = await loadFixture(deploySeededVaultFixture);
+      const day1 = firstBatchId;
 
       const navBefore = await proxy.getVaultNav();
       const [backstopBefore] = await proxy.getCapitalStack();
@@ -178,8 +182,8 @@ describe("LP Vault Scenarios", () => {
 
       // Large loss: -2000 on 10000 = 20% loss
       // This should trigger drawdown floor protection
-      await proxy.recordDailyPnl(1n, ethers.parseEther("-2000"), 0n);
-      await proxy.processDailyBatch(1n);
+      await proxy.recordDailyPnl(day1, ethers.parseEther("-2000"), 0n);
+      await proxy.processDailyBatch(day1);
 
       const navAfter = await proxy.getVaultNav();
       const [backstopAfter] = await proxy.getCapitalStack();
@@ -202,19 +206,21 @@ describe("LP Vault Scenarios", () => {
     });
 
     it("recovery from drawdown updates peak correctly", async () => {
-      const { proxy } = await loadFixture(deploySeededVaultFixture);
+      const { proxy, firstBatchId } = await loadFixture(deploySeededVaultFixture);
+      const day1 = firstBatchId;
+      const day2 = day1 + 1n;
 
       // Day 1: Loss
-      await proxy.recordDailyPnl(1n, ethers.parseEther("-1000"), 0n);
-      await proxy.processDailyBatch(1n);
+      await proxy.recordDailyPnl(day1, ethers.parseEther("-1000"), 0n);
+      await proxy.processDailyBatch(day1);
 
       const peakAfterLoss = await proxy.getVaultPricePeak();
       const priceAfterLoss = await proxy.getVaultPrice();
       expect(priceAfterLoss).to.be.lt(peakAfterLoss);
 
       // Day 2: Recovery
-      await proxy.recordDailyPnl(2n, ethers.parseEther("1500"), 0n);
-      await proxy.processDailyBatch(2n);
+      await proxy.recordDailyPnl(day2, ethers.parseEther("1500"), 0n);
+      await proxy.processDailyBatch(day2);
 
       const peakAfterRecovery = await proxy.getVaultPricePeak();
       const priceAfterRecovery = await proxy.getVaultPrice();
@@ -238,9 +244,12 @@ describe("LP Vault Scenarios", () => {
      * Verify: All requests processed, NAV/shares remain consistent
      */
     it("handles simultaneous large withdrawal requests", async () => {
-      const { proxy, userA, userB, userC, userD, userE } = await loadFixture(
+      const { proxy, userA, userB, userC, userD, userE, firstBatchId } = await loadFixture(
         deploySeededVaultFixture
       );
+      const day1 = firstBatchId;
+      const day2 = day1 + 1n;
+      const day3 = day1 + 2n;
 
       // Setup: Multiple users deposit
       const depositAmount = ethers.parseEther("2000");
@@ -250,8 +259,8 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userE).requestDeposit(depositAmount);
 
       // Process Day 1: deposits
-      await proxy.recordDailyPnl(1n, 0n, 0n);
-      await proxy.processDailyBatch(1n);
+      await proxy.recordDailyPnl(day1, 0n, 0n);
+      await proxy.processDailyBatch(day1);
 
       // All users claim deposits
       await proxy.connect(userB).claimDeposit(0n);
@@ -271,16 +280,16 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userE).requestWithdraw(withdrawAmount);
 
       // Check pending totals - O(1) aggregation should handle this
-      const [, pendingWithdraws] = await proxy.getPendingBatchTotals(3n); // D_lag=1, so eligible at batch 3
+      const [, pendingWithdraws] = await proxy.getPendingBatchTotals(day3); // D_lag=1, so eligible at day3
       expect(pendingWithdraws).to.equal(ethers.parseEther("7500")); // 5 * 1500
 
       // Process Day 2: empty (withdraws not eligible yet due to D_lag)
-      await proxy.recordDailyPnl(2n, 0n, 0n);
-      await proxy.processDailyBatch(2n);
+      await proxy.recordDailyPnl(day2, 0n, 0n);
+      await proxy.processDailyBatch(day2);
 
       // Process Day 3: withdrawals now eligible
-      await proxy.recordDailyPnl(3n, 0n, 0n);
-      await proxy.processDailyBatch(3n);
+      await proxy.recordDailyPnl(day3, 0n, 0n);
+      await proxy.processDailyBatch(day3);
 
       // All users claim withdrawals
       await proxy.connect(userA).claimWithdraw(0n);
@@ -300,22 +309,25 @@ describe("LP Vault Scenarios", () => {
     });
 
     it("D_lag prevents immediate bank run exit", async () => {
-      const { proxy, userB, module } = await loadFixture(
+      const { proxy, userB, module, firstBatchId } = await loadFixture(
         deploySeededVaultFixture
       );
+      const day1 = firstBatchId;
+      const day2 = day1 + 1n;
+      const day3 = day1 + 2n;
 
       // Users deposit
       await proxy.connect(userB).requestDeposit(ethers.parseEther("5000"));
-      await proxy.recordDailyPnl(1n, 0n, 0n);
-      await proxy.processDailyBatch(1n);
+      await proxy.recordDailyPnl(day1, 0n, 0n);
+      await proxy.processDailyBatch(day1);
       await proxy.connect(userB).claimDeposit(0n);
 
       // Panic: immediate withdrawal request
       await proxy.connect(userB).requestWithdraw(ethers.parseEther("5000"));
 
       // Try to claim immediately after batch 2
-      await proxy.recordDailyPnl(2n, 0n, 0n);
-      await proxy.processDailyBatch(2n);
+      await proxy.recordDailyPnl(day2, 0n, 0n);
+      await proxy.processDailyBatch(day2);
 
       // Should fail - D_lag not met (eligible at batch 3)
       await expect(
@@ -323,24 +335,27 @@ describe("LP Vault Scenarios", () => {
       ).to.be.revertedWithCustomError(module, "BatchNotProcessed");
 
       // Process batch 3 - now should work
-      await proxy.recordDailyPnl(3n, 0n, 0n);
-      await proxy.processDailyBatch(3n);
+      await proxy.recordDailyPnl(day3, 0n, 0n);
+      await proxy.processDailyBatch(day3);
 
       await expect(proxy.connect(userB).claimWithdraw(0n)).to.not.be.reverted;
     });
 
     it("maintains price invariant during mass exit", async () => {
-      const { proxy, userB, userC, userD } = await loadFixture(
+      const { proxy, userB, userC, userD, firstBatchId } = await loadFixture(
         deploySeededVaultFixture
       );
+      const day1 = firstBatchId;
+      const day2 = day1 + 1n;
+      const day3 = day1 + 2n;
 
       // Setup deposits
       await proxy.connect(userB).requestDeposit(ethers.parseEther("3000"));
       await proxy.connect(userC).requestDeposit(ethers.parseEther("3000"));
       await proxy.connect(userD).requestDeposit(ethers.parseEther("3000"));
 
-      await proxy.recordDailyPnl(1n, ethers.parseEther("500"), 0n); // Some profit
-      await proxy.processDailyBatch(1n);
+      await proxy.recordDailyPnl(day1, ethers.parseEther("500"), 0n); // Some profit
+      await proxy.processDailyBatch(day1);
 
       await proxy.connect(userB).claimDeposit(0n);
       await proxy.connect(userC).claimDeposit(1n);
@@ -354,10 +369,10 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userD).requestWithdraw(ethers.parseEther("2500"));
 
       // Process through D_lag
-      await proxy.recordDailyPnl(2n, 0n, 0n);
-      await proxy.processDailyBatch(2n);
-      await proxy.recordDailyPnl(3n, 0n, 0n);
-      await proxy.processDailyBatch(3n);
+      await proxy.recordDailyPnl(day2, 0n, 0n);
+      await proxy.processDailyBatch(day2);
+      await proxy.recordDailyPnl(day3, 0n, 0n);
+      await proxy.processDailyBatch(day3);
 
       await proxy.connect(userB).claimWithdraw(0n);
       await proxy.connect(userC).claimWithdraw(1n);

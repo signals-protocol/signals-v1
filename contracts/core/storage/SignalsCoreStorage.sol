@@ -7,6 +7,10 @@ import "../../interfaces/ISignalsPosition.sol";
 import "../../lib/LazyMulSegmentTree.sol";
 
 abstract contract SignalsCoreStorage {
+    /// @dev Batch/day granularity for daily accounting. Used to derive batchId as day-key.
+    ///      Note: This is a mechanism-layer constant (whitepaper "day t" cycle).
+    uint64 internal constant BATCH_SECONDS = 86_400;
+
     // Governance-configurable settlement windows (set via initializer/setter in Core).
     uint64 public settlementSubmitWindow;
     uint64 public settlementFinalizeDeadline;

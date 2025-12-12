@@ -18,6 +18,7 @@ interface CLMSRErrors {
     error MarketNotFailed(uint256 marketId);
     error MarketAlreadyFailed(uint256 marketId);
     error SettlementWindowNotExpired(uint64 deadline, uint64 currentTime);
+    error BatchAlreadyProcessed(uint64 batchId);
 
     /* Trade params */
     error InvalidTick(int256 tick, int256 minTick, int256 maxTick);
@@ -93,6 +94,7 @@ library CE {
     error MarketNotFailed(uint256 marketId);
     error MarketAlreadyFailed(uint256 marketId);
     error SettlementWindowNotExpired(uint64 deadline, uint64 currentTime);
+    error BatchAlreadyProcessed(uint64 batchId);
 
     /* Trade params */
     error InvalidTick(int256 tick, int256 minTick, int256 maxTick);

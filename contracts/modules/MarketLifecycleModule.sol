@@ -368,9 +368,9 @@ contract MarketLifecycleModule is SignalsCoreStorage {
      */
     function _getBatchIdForMarket(uint256 marketId) internal view returns (uint64) {
         ISignalsCore.Market storage market = markets[marketId];
-        // Use settlement timestamp divided by day (86400 seconds)
-        // This groups all markets settling on the same day into one batch
-        return uint64(market.settlementTimestamp / 86400);
+        // Use settlement timestamp divided by day (BATCH_SECONDS)
+        // This groups all markets settling on the same day into one batch (day-key)
+        return market.settlementTimestamp / BATCH_SECONDS;
     }
 
     /**
@@ -428,6 +428,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
      */
     function _recordPnlToBatch(uint64 batchId, int256 lt, uint256 ftot) internal {
         DailyPnlSnapshot storage snap = _dailyPnl[batchId];
+        if (snap.processed) revert CE.BatchAlreadyProcessed(batchId);
         snap.Lt += lt;
         snap.Ftot += ftot;
     }

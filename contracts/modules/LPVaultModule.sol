@@ -122,6 +122,14 @@ contract LPVaultModule is SignalsCoreStorage {
         lpVault.lastBatchTimestamp = uint64(block.timestamp);
         lpVault.isSeeded = true;
 
+        // Initialize currentBatchId as a day-key so that:
+        // - MarketLifecycleModule records P&L into batchId = settlementTimestamp / BATCH_SECONDS
+        // - LPVaultModule processes batches strictly sequentially (currentBatchId + 1)
+        //
+        // We set currentBatchId to "yesterday" so the first processDailyBatch targets "today".
+        uint64 todayBatchId = uint64(block.timestamp / uint256(BATCH_SECONDS));
+        currentBatchId = todayBatchId == 0 ? 0 : todayBatchId - 1;
+
         emit VaultSeeded(msg.sender, seedAmount, seedAmount);
     }
 
@@ -238,6 +246,7 @@ contract LPVaultModule is SignalsCoreStorage {
      */
     function recordDailyPnl(uint64 batchId, int256 lt, uint256 ftot) external onlyDelegated {
         DailyPnlSnapshot storage snap = _dailyPnl[batchId];
+        if (snap.processed) revert DailyBatchAlreadyProcessed(batchId);
         snap.Lt += lt;
         snap.Ftot += ftot;
     }
