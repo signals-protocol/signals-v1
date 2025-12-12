@@ -1,201 +1,189 @@
-// import { expect } from "chai"; // Will be used in Phase 5
+import { expect } from "chai";
+import { ethers } from "hardhat";
+import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import {
+  LazyMulSegmentTree,
+  LPVaultModule,
+  MarketLifecycleModule,
+  MockERC20,
+  MockSignalsPosition,
+  OracleModule,
+  SignalsCoreHarness,
+  TestERC1967Proxy,
+} from "../../../typechain-types";
 
-/**
- * VaultWithMarkets E2E Tests (Phase 5 Skeleton)
- *
- * Target: Full system - Vault + Markets + Settlement + P&L flow
- * Reference: docs/vault-invariants.md
- *
- * These tests require Market-Vault integration which is Phase 5 scope.
- * Currently placeholder tests documenting expected behavior.
- */
+const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+const BATCH_SECONDS = 86_400n;
+const WAD = ethers.parseEther("1");
+
+function buildOracleDigest(
+  chainId: bigint,
+  core: string,
+  marketId: bigint,
+  settlementValue: bigint,
+  priceTimestamp: bigint
+) {
+  const encoded = abiCoder.encode(
+    ["uint256", "address", "uint256", "int256", "uint64"],
+    [chainId, core, marketId, settlementValue, priceTimestamp]
+  );
+  return ethers.keccak256(encoded);
+}
 
 describe("VaultWithMarkets E2E", () => {
-  // ============================================================
-  // Market P&L → Vault NAV flow
-  // ============================================================
-  describe("Market P&L integration", () => {
-    it("market profit increases vault NAV", async () => {
-      // TODO: Full flow:
-      // 1. Create market with alpha from vault
-      // 2. Users trade (buy positions)
-      // 3. Market settles with outcome favoring vault
-      // 4. P&L calculated as positive L_t
-      // 5. processDailyBatch includes L_t
-      // 6. Vault NAV increases
-    });
+  async function deploySystem() {
+    const [owner, seeder, oracleSigner] = await ethers.getSigners();
+    const { chainId } = await ethers.provider.getNetwork();
 
-    it("market loss decreases vault NAV", async () => {
-      // TODO: Full flow:
-      // 1. Create market
-      // 2. Users trade
-      // 3. Market settles with outcome favoring traders
-      // 4. P&L calculated as negative L_t
-      // 5. processDailyBatch includes L_t
-      // 6. Vault NAV decreases
-    });
+    // Use 18-decimal token for vault accounting tests (WAD-aligned)
+    const MockERC20Factory = await ethers.getContractFactory("MockERC20");
+    const payment = (await MockERC20Factory.deploy(
+      "MockVaultToken",
+      "MVT",
+      18
+    )) as MockERC20;
 
-    it("multiple markets aggregate into single daily P&L", async () => {
-      // TODO: Markets A, B, C settle same day
-      // L_t = L_A + L_B + L_C
-    });
-  });
+    const position = (await (
+      await ethers.getContractFactory("MockSignalsPosition")
+    ).deploy()) as MockSignalsPosition;
 
-  // ============================================================
-  // Fee flow
-  // ============================================================
-  describe("Fee flow", () => {
-    it("trading fees flow through waterfall to vault", async () => {
-      // TODO: Trade generates fee → waterfall → F_t to vault
-    });
+    const lazy = (await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy()) as LazyMulSegmentTree;
+    const lifecycle = (await (
+      await ethers.getContractFactory("MarketLifecycleModule", {
+        libraries: { LazyMulSegmentTree: lazy.target },
+      })
+    ).deploy()) as MarketLifecycleModule;
 
-    it("fee accumulates across multiple trades", async () => {
-      // TODO: Multiple trades in day → accumulated F_t
-    });
-  });
+    const oracle = (await (await ethers.getContractFactory("OracleModule")).deploy()) as OracleModule;
+    const vault = (await (await ethers.getContractFactory("LPVaultModule")).deploy()) as LPVaultModule;
 
-  // ============================================================
-  // Backstop grant flow
-  // ============================================================
-  describe("Backstop grant flow", () => {
-    it("backstop provides grant on large loss", async () => {
-      // TODO:
-      // 1. Large loss occurs (L_t << 0)
-      // 2. NAV would fall below floor
-      // 3. Backstop grants G_t to maintain floor
-      // 4. Vault receives G_t in batch
-    });
+    const coreImpl = (await (
+      await ethers.getContractFactory("SignalsCoreHarness", {
+        libraries: { LazyMulSegmentTree: lazy.target },
+      })
+    ).deploy()) as SignalsCoreHarness;
 
-    it("grant limited by backstop balance", async () => {
-      // TODO: G_t cannot exceed B_{t-1}
-    });
-  });
+    const submitWindow = 300;
+    const finalizeDeadline = 60;
+    const initData = coreImpl.interface.encodeFunctionData("initialize", [
+      payment.target,
+      position.target,
+      submitWindow,
+      finalizeDeadline,
+    ]);
 
-  // ============================================================
-  // Alpha limit interaction
-  // ============================================================
-  describe("Alpha limit interaction", () => {
-    it("vault drawdown affects market alpha limit", async () => {
-      // TODO:
-      // 1. Vault experiences loss, drawdown increases
-      // 2. Alpha limit decreases: α_limit = α_base * (1 - k * DD)
-      // 3. New market creation respects lower alpha limit
-    });
+    const proxy = (await (
+      await ethers.getContractFactory("TestERC1967Proxy")
+    ).deploy(coreImpl.target, initData)) as TestERC1967Proxy;
 
-    it("alpha limit recovered when drawdown decreases", async () => {
-      // TODO:
-      // 1. Vault recovers (NAV increases)
-      // 2. Drawdown decreases
-      // 3. Alpha limit increases again
-    });
-  });
+    const core = (await ethers.getContractAt(
+      "SignalsCoreHarness",
+      await proxy.getAddress()
+    )) as SignalsCoreHarness;
 
-  // ============================================================
-  // LP lifecycle with markets
-  // ============================================================
-  describe("LP lifecycle", () => {
-    it("LP deposits before market activity, shares priced fairly", async () => {
-      // TODO: Deposit → market activity → share value changes
-    });
+    await core.setModules(
+      ethers.ZeroAddress,
+      lifecycle.target,
+      ethers.ZeroAddress,
+      vault.target,
+      oracle.target
+    );
+    await core.setOracleConfig(oracleSigner.address);
 
-    it("LP withdraws after market profit, captures gains", async () => {
-      // TODO: Market profit → NAV up → LP withdraws at higher price
-    });
+    // Vault config needed for batch processing
+    await core.setMinSeedAmount(ethers.parseEther("100"));
+    await core.setWithdrawalLagBatches(0);
+    await core.setFeeWaterfallConfig(
+      ethers.parseEther("-0.2"), // pdd
+      0n, // rhoBS
+      ethers.parseEther("0.8"), // phiLP
+      ethers.parseEther("0.1"), // phiBS
+      ethers.parseEther("0.1") // phiTR
+    );
+    await core.setCapitalStack(0n, 0n);
 
-    it("LP withdraws after market loss, bears loss", async () => {
-      // TODO: Market loss → NAV down → LP withdraws at lower price
-    });
+    return { owner, seeder, oracleSigner, chainId, core, payment };
+  }
 
-    it("late LP depositor does not capture prior gains", async () => {
-      // TODO: Market profit → price up → new LP deposits at higher price
-    });
-  });
+  it("settleMarket records daily PnL and vault consumes it in processDailyBatch", async () => {
+    const { owner, seeder, oracleSigner, chainId, core, payment } = await loadFixture(
+      deploySystem
+    );
 
-  // ============================================================
-  // Multi-day market scenarios
-  // ============================================================
-  describe("Multi-day scenarios", () => {
-    it("market spans multiple days before settlement", async () => {
-      // TODO: Market created Day 1, settles Day 5
-      // Daily batches process fees, no P&L until settlement
-    });
+    // Fix timestamp so batchId (day-key) is deterministic and monotonic
+    const latest = BigInt(await time.latest());
+    const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
+    const dayKey = seedTime / BATCH_SECONDS;
+    const expectedFirstBatchId = dayKey;
 
-    it("staggered market settlements", async () => {
-      // TODO: Market A settles Day 3, Market B settles Day 5
-      // Each settlement contributes to that day's P&L
-    });
+    // Seed vault (sets currentBatchId = dayKey - 1)
+    const seedAmount = ethers.parseEther("1000");
+    await payment.mint(seeder.address, seedAmount);
+    await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
 
-    it("continuous LP activity during market lifecycle", async () => {
-      // TODO: Deposits/withdrawals each day while markets active
-    });
-  });
+    await time.setNextBlockTimestamp(Number(seedTime));
+    await core.connect(seeder).seedVault(seedAmount);
 
-  // ============================================================
-  // Stress scenarios
-  // ============================================================
-  describe("Stress scenarios", () => {
-    it("handles maximum drawdown scenario", async () => {
-      // TODO: Consecutive losses → drawdown approaches p_dd limit
-    });
+    const currentBatchId = await core.currentBatchId();
+    expect(currentBatchId).to.equal(expectedFirstBatchId - 1n);
 
-    it("handles bank-run scenario (mass withdrawal)", async () => {
-      // TODO: Large pending withdraws, D_lag protects
-    });
+    // Create a market that settles on the same day-key as the first vault batch
+    // Use a Tset after seeding to keep block timestamps monotonic.
+    const tSet = seedTime + 10n;
+    const start = tSet - 200n;
+    const end = tSet - 20n;
 
-    it("handles backstop depletion scenario", async () => {
-      // TODO: Backstop runs low, grants limited
-    });
+    const marketId = await core.createMarket.staticCall(
+      0,
+      4,
+      1,
+      Number(start),
+      Number(end),
+      Number(tSet),
+      4,
+      WAD,
+      ethers.ZeroAddress
+    );
+    await core.createMarket(0, 4, 1, Number(start), Number(end), Number(tSet), 4, WAD, ethers.ZeroAddress);
 
-    it("handles rapid market creation/settlement", async () => {
-      // TODO: Many markets in short period
-    });
-  });
+    // Manipulate tree state to create non-zero P&L at settlement
+    // Z_start = 4e18, Z_end = 5e18 → L_t > 0
+    await core.harnessSeedTree(marketId, [
+      2n * WAD,
+      1n * WAD,
+      1n * WAD,
+      1n * WAD,
+    ]);
 
-  // ============================================================
-  // Invariant checks across system
-  // ============================================================
-  describe("System invariants", () => {
-    it("total capital = LP + Backstop + Treasury", async () => {
-      // TODO: Conservation of capital
-    });
+    const batchId = tSet / BATCH_SECONDS;
+    expect(batchId).to.equal(expectedFirstBatchId);
 
-    it("market exposure bounded by alpha limit", async () => {
-      // TODO: sum(market.alpha) <= vault-derived limit
-    });
+    // Submit oracle price candidate within window [Tset, Tset + submitWindow]
+    const priceTimestamp = tSet + 1n;
+    const digest = buildOracleDigest(chainId, await core.getAddress(), marketId, 1n, priceTimestamp);
+    const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
 
-    it("LP share price reflects true NAV", async () => {
-      // TODO: No arbitrage between deposit/withdraw
-    });
+    await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
+    await core.submitSettlementPrice(marketId, 1n, Number(priceTimestamp), sig);
 
-    it("backstop never goes negative", async () => {
-      // TODO: B_t >= 0 always
-    });
-  });
+    // Finalize settlement and record P&L into _dailyPnl[batchId]
+    await time.setNextBlockTimestamp(Number(priceTimestamp + 2n));
+    await core.connect(owner).settleMarket(marketId);
 
-  // ============================================================
-  // Oracle integration
-  // ============================================================
-  describe("Oracle integration", () => {
-    it("settlement price determines market P&L", async () => {
-      // TODO: Oracle price → winning tick → payout calculation → P&L
-    });
+    const [ltBefore, ftotBefore, , , , , processedBefore] = await core.getDailyPnl.staticCall(batchId);
+    expect(processedBefore).to.equal(false);
+    expect(ftotBefore).to.equal(0n);
+    expect(ltBefore).to.not.equal(0n);
 
-    it("failed market handled gracefully", async () => {
-      // TODO: Oracle failure → market marked failed → no P&L
-    });
-  });
+    const navBefore = await core.getVaultNav.staticCall();
+    await core.processDailyBatch(batchId);
+    const navAfter = await core.getVaultNav.staticCall();
 
-  // ============================================================
-  // Emergency scenarios
-  // ============================================================
-  describe("Emergency scenarios", () => {
-    it("pause halts all operations", async () => {
-      // TODO: Emergency pause → trading, batch processing stopped
-    });
+    expect(navAfter).to.not.equal(navBefore);
 
-    it("unpause resumes operations", async () => {
-      // TODO: After pause resolved, operations resume
-    });
+    const [, , , , , , processedAfter] = await core.getDailyPnl.staticCall(batchId);
+    expect(processedAfter).to.equal(true);
+    expect(await core.currentBatchId()).to.equal(batchId);
   });
 });
 
