@@ -69,6 +69,9 @@ describe("VaultBatchFlow Integration", () => {
     const { proxy, userA } = fixture;
     // Seed with 6-decimal token amount (converts to 1000 WAD internally)
     await proxy.connect(userA).seedVault(usdc("1000"));
+    // WP v2: Initialize backstopNav for deltaEt calculation
+    // This ensures FeeWaterfall doesn't revert on grantNeed > deltaEt
+    await proxy.setCapitalStack(ethers.parseEther("500"), 0n); // 500 WAD backstop
     const currentBatchId = await proxy.getCurrentBatchId();
     const firstBatchId = currentBatchId + 1n;
     return { ...fixture, currentBatchId, firstBatchId };

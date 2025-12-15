@@ -91,7 +91,16 @@ export function calculateFeeWaterfall(
   }
 
   const grantNeed = Nfloor > Nraw ? Nfloor - Nraw : 0n;
-  const Gt = min(p.deltaEt, grantNeed);
+  
+  // WP v2: if grantNeed > deltaEt, batch must revert (drawdown floor invariant)
+  if (grantNeed > p.deltaEt) {
+    throw new Error(
+      `GrantExceedsTailBudget: grantNeed=${grantNeed}, deltaEt=${p.deltaEt}`
+    );
+  }
+  
+  // Gt = grantNeed (no capping - either we can afford it or we revert)
+  const Gt = grantNeed;
 
   if (Gt > p.Bprev) {
     throw new Error(

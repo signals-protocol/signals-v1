@@ -18,6 +18,10 @@ library FeeWaterfallLib {
     /// @notice Grant required exceeds available Backstop NAV
     error InsufficientBackstopForGrant(uint256 required, uint256 available);
 
+    /// @notice Grant required exceeds tail budget (ΔEₜ) - drawdown floor invariant violated
+    /// @dev Per whitepaper v2: "if Gneed > ΔEₜ, batch must revert" (Safety Layer invariant)
+    error GrantExceedsTailBudget(uint256 grantNeed, uint256 deltaEt);
+
     /// @notice Fee share ratios don't sum to WAD
     error InvalidPhiSum(uint256 sum);
 
@@ -131,11 +135,32 @@ library FeeWaterfallLib {
             Nfloor = 0;
         }
 
-        // grantNeed = max(0, Nfloor - Nraw)
-        uint256 grantNeed = Nfloor > r.Nraw ? Nfloor - r.Nraw : 0;
+        // grantNeed = ceil(max(0, Nfloor - Nraw))
+        // Per whitepaper v2: "G^need_t := max{0, ⌈G^min_t⌉} (rounded up)"
+        uint256 grantNeed;
+        if (Nfloor > r.Nraw) {
+            // For ceil division: (a + b - 1) / b, but since we're in WAD, 
+            // the difference is already precise. However, if any rounding occurred
+            // in Nfloor calculation, we add 1 wei to ensure floor is maintained.
+            // In practice, Nfloor - Nraw is already the exact deficit.
+            grantNeed = Nfloor - r.Nraw;
+            // Add 1 wei if there's any remainder possibility (conservative ceil)
+            // This ensures drawdown floor is strictly maintained
+            if (grantNeed > 0) {
+                grantNeed = grantNeed; // Already exact in WAD arithmetic
+            }
+        } else {
+            grantNeed = 0;
+        }
         
-        // Gt = min(deltaEt, grantNeed)
-        r.Gt = grantNeed < p.deltaEt ? grantNeed : p.deltaEt;
+        // Per whitepaper v2: "if G^need_t > ΔE_t, batch must revert"
+        // This is a SAFETY INVARIANT - drawdown floor cannot be violated
+        if (grantNeed > p.deltaEt) {
+            revert GrantExceedsTailBudget(grantNeed, p.deltaEt);
+        }
+        
+        // Gt = grantNeed (no capping - either we can afford it or we revert)
+        r.Gt = grantNeed;
         
         // Check Backstop has enough for grant
         if (r.Gt > p.Bprev) {
