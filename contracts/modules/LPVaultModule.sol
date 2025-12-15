@@ -404,10 +404,28 @@ contract LPVaultModule is SignalsCoreStorage {
     }
 
     /**
-     * @notice Get available backstop support limit (ΔE_t)
-     * @return deltaEt Available backstop support limit
+     * @notice Get tail budget (ΔE_t) for current batch
+     * @dev Per whitepaper v2 Sec 4.1:
+     *      ΔE_t := E_ent(q₀,t) - α_t ln n
+     *      where E_ent is entropy budget from opening prior q₀,t
+     *
+     *      For uniform prior (q₀,t = 0): ΔE_t = 0 (no tail risk)
+     *      For concentrated priors: ΔE_t > 0 (additional tail risk)
+     *
+     *      Admissibility constraint: ΔE_t ≤ B^eff_{t-1}
+     *      Grant rule: G^need_t > ΔE_t causes batch revert (Safety invariant)
+     *
+     *      PHASE 7 TODO: Replace this placeholder with actual prior-based calculation.
+     *      Current implementation returns backstopNav as a conservative upper bound,
+     *      but this is NOT the correct ΔE_t definition per whitepaper.
+     *
+     * @return deltaEt Tail budget for grant calculation (WAD)
      */
     function _getDeltaEt() internal view returns (uint256) {
+        // FIXME(Phase 7): Implement prior-based ΔE_t calculation
+        // For v1 with uniform priors, ΔE_t should be 0.
+        // Using backstopNav as placeholder allows testing of grant mechanics,
+        // but violates whitepaper definition.
         return capitalStack.backstopNav;
     }
 
