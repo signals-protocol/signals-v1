@@ -120,6 +120,7 @@ abstract contract SignalsCoreStorage {
         // Input values
         int256 Lt;               // CLMSR P&L (signed)
         uint256 Ftot;            // Total gross fees
+        uint256 DeltaEtSum;      // Sum of ΔEₜ from all settled markets in this batch
         
         // Fee Waterfall intermediate values
         uint256 Floss;           // Loss compensation: min(Ftot, |L^-|)

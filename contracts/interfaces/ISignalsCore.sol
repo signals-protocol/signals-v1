@@ -40,6 +40,12 @@ interface ISignalsCore {
         // Used to compute ΔEₜ = α * ln(rootSum / (n * minFactor))
         // Uniform prior: minFactor = 1 WAD → ΔEₜ = 0
         uint256 minFactor;
+
+        // Phase 7: Tail budget (ΔEₜ) calculated at market creation (WAD)
+        // Per whitepaper v2: ΔEₜ := E_ent(q₀,t) - αₜ ln n
+        // Used in batch processing: grantNeed > ΔEₜ → revert
+        // Stored at creation to avoid re-computation and ensure consistency
+        uint256 deltaEt;
     }
 
     // Trade / lifecycle entrypoints (signatures preserved for parity)
