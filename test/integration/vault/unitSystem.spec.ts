@@ -140,8 +140,14 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
       await proxy.setMinSeedAmount(1_000_000n); // 1 USDC
       await proxy.setWithdrawLag(0);
       await proxy.setWithdrawalLagBatches(0);
+      // Configure Risk (sets pdd := -λ)
+      await proxy.setRiskConfig(
+        ethers.parseEther("0.2"), // lambda = 0.2
+        ethers.parseEther("1"), // kDrawdown
+        false // enforceAlpha
+      );
+      // Configure FeeWaterfall (pdd is already set via setRiskConfig)
       await proxy.setFeeWaterfallConfig(
-        ethers.parseEther("-0.2"),
         0n,
         ethers.parseEther("0.8"),
         ethers.parseEther("0.1"),
@@ -238,8 +244,14 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
       await proxy.setMinSeedAmount(1_000_000n);
       await proxy.setWithdrawLag(0);
       await proxy.setWithdrawalLagBatches(0);
+      // Configure Risk (sets pdd := -λ)
+      await proxy.setRiskConfig(
+        ethers.parseEther("0.2"), // lambda = 0.2
+        ethers.parseEther("1"), // kDrawdown
+        false // enforceAlpha
+      );
+      // Configure FeeWaterfall (pdd is already set via setRiskConfig)
       await proxy.setFeeWaterfallConfig(
-        ethers.parseEther("-0.2"),
         0n,
         ethers.parseEther("0.8"),
         ethers.parseEther("0.1"),
@@ -335,8 +347,14 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
       await proxy.setMinSeedAmount(1_000_000n); // 1 USDC (6 decimals)
       await proxy.setWithdrawLag(0);
       await proxy.setWithdrawalLagBatches(0);
+      // Configure Risk (sets pdd := -λ)
+      await proxy.setRiskConfig(
+        ethers.parseEther("0.2"), // lambda = 0.2
+        ethers.parseEther("1"), // kDrawdown
+        false // enforceAlpha
+      );
+      // Configure FeeWaterfall (pdd is already set via setRiskConfig)
       await proxy.setFeeWaterfallConfig(
-        ethers.parseEther("-0.2"),
         0n,
         ethers.parseEther("0.8"),
         ethers.parseEther("0.1"),

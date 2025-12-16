@@ -42,10 +42,17 @@ describe("LP Vault Scenarios", () => {
     await proxy.setWithdrawLag(0);
     await proxy.setWithdrawalLagBatches(1); // D_lag = 1 batch
 
-    // FeeWaterfall config (WAD ratios, not token amounts)
-    // pdd = -20%, phiLP = 80%, phiBS = 10%, phiTR = 10%
+    // Configure Risk (sets pdd := -λ)
+    // λ = 0.2 → pdd = -0.2 (20% drawdown floor)
+    await proxy.setRiskConfig(
+      ethers.parseEther("0.2"), // lambda = 0.2
+      ethers.parseEther("1"), // kDrawdown
+      false // enforceAlpha
+    );
+
+    // FeeWaterfall config (pdd is already set via setRiskConfig)
+    // phi splits: LP=80%, BS=10%, TR=10%
     await proxy.setFeeWaterfallConfig(
-      ethers.parseEther("-0.2"),
       0n,
       ethers.parseEther("0.8"),
       ethers.parseEther("0.1"),
@@ -107,7 +114,12 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userB).requestDeposit(usdc("1000"));
 
       // Market profit: L = +500
-      await proxy.recordDailyPnl(day1, ethers.parseEther("500"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        day1,
+        ethers.parseEther("500"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(day1);
 
       // userB claims deposit
@@ -148,7 +160,12 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userA).requestWithdraw(ethers.parseEther("1000"));
 
       // Market profit: L = +300
-      await proxy.recordDailyPnl(day3, ethers.parseEther("300"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        day3,
+        ethers.parseEther("300"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(day3);
 
       // D_lag = 1, withdraw request is eligible at (currentBatchId + 1 + D_lag)
@@ -197,7 +214,12 @@ describe("LP Vault Scenarios", () => {
 
       // Large loss: -2000 on 10000 = 20% loss
       // This should trigger drawdown floor protection
-      await proxy.recordDailyPnl(day1, ethers.parseEther("-2000"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        day1,
+        ethers.parseEther("-2000"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(day1);
 
       const navAfter = await proxy.getVaultNav();
@@ -228,7 +250,12 @@ describe("LP Vault Scenarios", () => {
       const day2 = day1 + 1n;
 
       // Day 1: Loss
-      await proxy.recordDailyPnl(day1, ethers.parseEther("-1000"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        day1,
+        ethers.parseEther("-1000"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(day1);
 
       const peakAfterLoss = await proxy.getVaultPricePeak();
@@ -236,7 +263,12 @@ describe("LP Vault Scenarios", () => {
       expect(priceAfterLoss).to.be.lt(peakAfterLoss);
 
       // Day 2: Recovery
-      await proxy.recordDailyPnl(day2, ethers.parseEther("1500"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        day2,
+        ethers.parseEther("1500"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(day2);
 
       const peakAfterRecovery = await proxy.getVaultPricePeak();
@@ -370,7 +402,12 @@ describe("LP Vault Scenarios", () => {
       await proxy.connect(userC).requestDeposit(usdc("3000"));
       await proxy.connect(userD).requestDeposit(usdc("3000"));
 
-      await proxy.recordDailyPnl(day1, ethers.parseEther("500"), 0n, ethers.parseEther("500")); // Some profit
+      await proxy.recordDailyPnl(
+        day1,
+        ethers.parseEther("500"),
+        0n,
+        ethers.parseEther("500")
+      ); // Some profit
       await proxy.processDailyBatch(day1);
 
       await proxy.connect(userB).claimDeposit(0n);

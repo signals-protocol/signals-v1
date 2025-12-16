@@ -45,8 +45,16 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
     await proxy.setMinSeedAmount(usdc("100"));
     await proxy.setWithdrawLag(0);
     await proxy.setWithdrawalLagBatches(0);
+    // Configure Risk (sets pdd := -λ)
+    // λ = 0.3 → pdd = -0.3 (30% drawdown floor)
+    await proxy.setRiskConfig(
+      ethers.parseEther("0.3"), // lambda = 0.3
+      ethers.parseEther("1"), // kDrawdown
+      false // enforceAlpha
+    );
+
+    // Configure FeeWaterfall (pdd is already set via setRiskConfig)
     await proxy.setFeeWaterfallConfig(
-      ethers.parseEther("-0.3"), // pdd = -30% (WAD ratio)
       0n, // rhoBS
       ethers.parseEther("0.7"), // phiLP = 70% (WAD ratio)
       ethers.parseEther("0.2"), // phiBS = 20% (WAD ratio)
@@ -124,7 +132,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
       );
 
       await proxy.connect(userA).requestDeposit(usdc("500"));
-      await proxy.recordDailyPnl(currentBatchId + 1n, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        currentBatchId + 1n,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(currentBatchId + 1n);
 
       // Record state after batch (batch already updated NAV/Shares)
@@ -153,7 +166,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
       );
 
       await proxy.connect(owner).requestWithdraw(ethers.parseEther("200"));
-      await proxy.recordDailyPnl(currentBatchId + 1n, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        currentBatchId + 1n,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(currentBatchId + 1n);
 
       const navAfterBatch = await proxy.getVaultNav();
@@ -305,7 +323,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
       await proxy.connect(owner).requestWithdraw(ethers.parseEther("50"));
 
       const batchId = currentBatchId + 1n;
-      await proxy.recordDailyPnl(batchId, ethers.parseEther("30"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        batchId,
+        ethers.parseEther("30"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(batchId);
 
       // Get batch aggregation
@@ -378,7 +401,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
       await proxy.connect(owner).requestWithdraw(ethers.parseEther("100"));
 
       const batchId = currentBatchId + 1n;
-      await proxy.recordDailyPnl(batchId, ethers.parseEther("50"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        batchId,
+        ethers.parseEther("50"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(batchId);
 
       const [, , batchPrice] = await proxy.getBatchAggregation(batchId);
@@ -408,7 +436,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
 
       // Process batch with P&L
       const batchId = currentBatchId + 1n;
-      await proxy.recordDailyPnl(batchId, ethers.parseEther("100"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        batchId,
+        ethers.parseEther("100"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(batchId);
 
       const finalPrice = await proxy.getVaultPrice();
@@ -431,7 +464,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
       await proxy.connect(userA).requestDeposit(usdc("500"));
 
       const batchId = currentBatchId + 1n;
-      await proxy.recordDailyPnl(batchId, ethers.parseEther("100"), 0n, ethers.parseEther("500")); // +10% P&L
+      await proxy.recordDailyPnl(
+        batchId,
+        ethers.parseEther("100"),
+        0n,
+        ethers.parseEther("500")
+      ); // +10% P&L
       await proxy.processDailyBatch(batchId);
 
       // Claim deposit
@@ -487,7 +525,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
       const batchId = currentBatchId + 1n;
       const navBefore = await proxy.getVaultNav();
 
-      await proxy.recordDailyPnl(batchId, ethers.parseEther("100"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        batchId,
+        ethers.parseEther("100"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(batchId);
 
       const navAfter = await proxy.getVaultNav();

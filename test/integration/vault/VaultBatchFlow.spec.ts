@@ -43,9 +43,16 @@ describe("VaultBatchFlow Integration", () => {
     await proxy.setWithdrawLag(0);
     await proxy.setWithdrawalLagBatches(0); // Immediate withdrawals for testing
 
-    // Configure FeeWaterfall for batch processing (WAD ratios, not affected by token decimals)
+    // Configure Risk (sets pdd := -λ)
+    // λ = 0.2 → pdd = -0.2 (20% drawdown floor)
+    await proxy.setRiskConfig(
+      ethers.parseEther("0.2"), // lambda = 0.2
+      ethers.parseEther("1"), // kDrawdown
+      false // enforceAlpha
+    );
+
+    // Configure FeeWaterfall for batch processing (pdd is already set via setRiskConfig)
     await proxy.setFeeWaterfallConfig(
-      ethers.parseEther("-0.2"), // pdd = -20%
       0n, // rhoBS
       ethers.parseEther("0.8"), // phiLP = 80%
       ethers.parseEther("0.1"), // phiBS = 10%

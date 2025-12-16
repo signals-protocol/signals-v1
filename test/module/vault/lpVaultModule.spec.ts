@@ -50,11 +50,17 @@ describe("LPVaultModule", () => {
     await proxy.setWithdrawLag(0);
     await proxy.setWithdrawalLagBatches(1); // D_lag = 1 batch
 
-    // Configure FeeWaterfall (required for processDailyBatch)
-    // pdd = -0.2 (20% drawdown floor), rhoBS = 0
+    // Configure Risk (sets pdd := -λ)
+    // λ = 0.2 → pdd = -0.2 (20% drawdown floor)
+    await proxy.setRiskConfig(
+      ethers.parseEther("0.2"), // lambda = 0.2
+      ethers.parseEther("1"), // kDrawdown
+      false // enforceAlpha
+    );
+
+    // Configure FeeWaterfall (pdd is already set via setRiskConfig)
     // phi splits: LP=80%, BS=10%, TR=10%
     await proxy.setFeeWaterfallConfig(
-      ethers.parseEther("-0.2"), // pdd (WAD ratio)
       0n, // rhoBS
       ethers.parseEther("0.8"), // phiLP (WAD ratio)
       ethers.parseEther("0.1"), // phiBS (WAD ratio)
@@ -267,7 +273,12 @@ describe("LPVaultModule", () => {
       await proxy.connect(userB).requestDeposit(usdc("100"));
 
       // Process the batch
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // Claim first to change status from Pending to Claimed
@@ -336,7 +347,12 @@ describe("LPVaultModule", () => {
       await proxy.connect(userB).requestDeposit(usdc("200"));
 
       // Record P&L for batch 1
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
 
       const moduleAtProxy = module.attach(proxy.target);
 
@@ -356,7 +372,12 @@ describe("LPVaultModule", () => {
       );
 
       await proxy.connect(userB).requestDeposit(usdc("500"));
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // N = 1000 + 500 = 1500
@@ -387,7 +408,12 @@ describe("LPVaultModule", () => {
       await proxy.setWithdrawalLagBatches(0);
 
       await proxy.connect(userA).requestWithdraw(ethers.parseEther("200"));
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
 
       const moduleAtProxy = module.attach(proxy.target);
 
@@ -413,7 +439,12 @@ describe("LPVaultModule", () => {
       await proxy.connect(userA).requestWithdraw(ethers.parseEther("300"));
       await proxy.connect(userB).requestDeposit(usdc("500"));
 
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // Net: +500 - 300 = +200
@@ -439,7 +470,12 @@ describe("LPVaultModule", () => {
       // Record positive P&L so price changes
       // N_pre = 1000 + 100 (P&L) = 1100, S = 1000
       // P_e = 1.1
-      await proxy.recordDailyPnl(firstBatchId, ethers.parseEther("100"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        ethers.parseEther("100"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       const moduleAtProxy = module.attach(proxy.target);
@@ -474,7 +510,12 @@ describe("LPVaultModule", () => {
       );
 
       await proxy.connect(userB).requestDeposit(usdc("100"));
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // First claim succeeds
@@ -492,7 +533,12 @@ describe("LPVaultModule", () => {
       );
 
       await proxy.connect(userB).requestDeposit(usdc("100"));
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       await expect(
@@ -519,7 +565,12 @@ describe("LPVaultModule", () => {
       // Process with positive P&L
       // N_pre = 1000 + 200 = 1200, S = 1000
       // P_e = 1.2
-      await proxy.recordDailyPnl(firstBatchId, ethers.parseEther("200"), 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        ethers.parseEther("200"),
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       const moduleAtProxy = module.attach(proxy.target);
@@ -542,7 +593,12 @@ describe("LPVaultModule", () => {
       await proxy.connect(userA).requestWithdraw(ethers.parseEther("100"));
 
       // Process first batch (N+1)
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // Batch 2 not yet processed, claim should fail
@@ -560,12 +616,22 @@ describe("LPVaultModule", () => {
       await proxy.connect(userA).requestWithdraw(ethers.parseEther("100"));
 
       // Process first batch
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // Process second batch
       const secondBatchId = firstBatchId + 1n;
-      await proxy.recordDailyPnl(secondBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        secondBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(secondBatchId);
 
       const moduleAtProxy = module.attach(proxy.target);
@@ -609,7 +675,12 @@ describe("LPVaultModule", () => {
       // which should equal sum of individual amounts (in WAD)
       const expectedTotalWad = amountsWad[0] + amountsWad[1] + amountsWad[2];
 
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // Verify NAV increased by total deposits (NAV is WAD)
@@ -630,7 +701,12 @@ describe("LPVaultModule", () => {
       await proxy.connect(userA).cancelDeposit(0n);
 
       // Process batch - should only include userB's 200
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       expect(await proxy.getVaultNav()).to.equal(ethers.parseEther("1200"));
@@ -658,7 +734,12 @@ describe("LPVaultModule", () => {
       await proxy.connect(userB).requestDeposit(usdc("200"));
 
       // Process first batch - deposit included in batch totals
-      await proxy.recordDailyPnl(firstBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        firstBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(firstBatchId);
 
       // Deposit claimable (deposit request ID = 0)
@@ -672,7 +753,12 @@ describe("LPVaultModule", () => {
 
       // Process second batch
       const secondBatchId = firstBatchId + 1n;
-      await proxy.recordDailyPnl(secondBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        secondBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(secondBatchId);
 
       // Still not claimable
@@ -682,7 +768,12 @@ describe("LPVaultModule", () => {
 
       // Process third batch
       const thirdBatchId = firstBatchId + 2n;
-      await proxy.recordDailyPnl(thirdBatchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.recordDailyPnl(
+        thirdBatchId,
+        0n,
+        0n,
+        ethers.parseEther("500")
+      );
       await proxy.processDailyBatch(thirdBatchId);
 
       // NOW claimable
