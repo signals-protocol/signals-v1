@@ -266,11 +266,12 @@ contract LPVaultModule is SignalsCoreStorage {
      * @param lt CLMSR P&L (signed)
      * @param ftot Gross fees
      */
-    function recordDailyPnl(uint64 batchId, int256 lt, uint256 ftot) external onlyDelegated {
+    function recordDailyPnl(uint64 batchId, int256 lt, uint256 ftot, uint256 deltaEt) external onlyDelegated {
         DailyPnlSnapshot storage snap = _dailyPnl[batchId];
         if (snap.processed) revert DailyBatchAlreadyProcessed(batchId);
         snap.Lt += lt;
         snap.Ftot += ftot;
+        snap.DeltaEtSum += deltaEt;
     }
 
     /**
@@ -305,7 +306,7 @@ contract LPVaultModule is SignalsCoreStorage {
             Nprev: lpVault.nav,
             Bprev: capitalStack.backstopNav,
             Tprev: capitalStack.treasuryNav,
-            deltaEt: _getDeltaEt(),
+            deltaEt: _getDeltaEtForBatch(batchId),
             pdd: feeWaterfallConfig.pdd,
             rhoBS: feeWaterfallConfig.rhoBS,
             phiLP: feeWaterfallConfig.phiLP,
@@ -404,33 +405,22 @@ contract LPVaultModule is SignalsCoreStorage {
     }
 
     /**
-     * @notice Get tail budget (ΔE_t) for current batch
+     * @notice Get tail budget (ΔEₜ) sum for a batch
      * @dev Per whitepaper v2 Sec 4.1:
-     *      ΔE_t := E_ent(q₀,t) - α_t ln n
-     *      where E_ent is entropy budget from opening prior q₀,t
+     *      ΔEₜ := E_ent(q₀,t) - αₜ ln n
      *
-     *      V1 DESIGN DECISION: Uniform prior only
-     *      ==========================================
-     *      For uniform prior (q₀,t = 0): E_ent = α ln n, so ΔE_t = 0
-     *      This means NO additional tail risk beyond what α bounds already guarantee.
+     *      Each market calculates its ΔEₜ at creation from baseFactors (prior).
+     *      At settlement, market's ΔEₜ is added to the batch's DeltaEtSum.
+     *      This batch sum is used in the grant rule: grantNeed > DeltaEtSum → revert.
      *
-     *      Combined with α ≤ αbase = λE/ln(n) enforcement (Phase 7),
-     *      uniform prior ensures worst-case loss ≤ λE, so drawdown floor
-     *      (pdd = -λ) is ALWAYS satisfied without backstop grants.
+     *      Uniform prior: factors = 1 WAD → ΔEₜ = 0 per market → sum = 0
+     *      Concentrated prior: ΔEₜ > 0 per market → sum > 0
      *
-     *      Safety invariant: If grantNeed > ΔE_t, the batch MUST revert.
-     *      This indicates α bounds were violated or an unexpected loss occurred.
-     *
-     *      The deltaEt value can be set via feeWaterfallConfig.deltaEt:
-     *      - Production V1: 0 (uniform prior, no tail risk)
-     *      - Testing: Can be set to backstopNav or other values to test grant mechanics
-     *      - Future: Will be calculated from actual prior weights
-     *
-     * @return deltaEt Tail budget for grant calculation (WAD)
+     * @param batchId Batch identifier
+     * @return deltaEt Sum of ΔEₜ from all settled markets in this batch (WAD)
      */
-    function _getDeltaEt() internal view returns (uint256) {
-        // Return configured deltaEt (default 0 for V1 uniform prior)
-        return feeWaterfallConfig.deltaEt;
+    function _getDeltaEtForBatch(uint64 batchId) internal view returns (uint256) {
+        return _dailyPnl[batchId].DeltaEtSum;
     }
 
     /**

@@ -122,7 +122,8 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         market.settlementValue = 0;
         market.liquidityParameter = liquidityParameter;
         market.feePolicy = feePolicy;
-        market.minFactor = minFactor; // Phase 7: Store for ΔEₜ calculation
+        market.minFactor = minFactor;
+        market.deltaEt = deltaEt; // Store ΔEₜ for batch processing
 
         LazyMulSegmentTree.Tree storage tree = marketTrees[marketId];
         tree.init(numBins);
@@ -194,7 +195,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         // Track total payout reserve for free balance calculation
         _totalPayoutReserve6 += payoutReserve;
         
-        _recordPnlToBatch(batchId, lt, ftot);
+        _recordPnlToBatch(batchId, lt, ftot, market.deltaEt);
         
         emit MarketPnlRecorded(marketId, batchId, lt, ftot);
         emit MarketSettled(marketId, market.settlementValue, settlementTick, market.settlementFinalizedAt);
@@ -273,7 +274,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         // Track total payout reserve for free balance calculation
         _totalPayoutReserve6 += payoutReserve;
         
-        _recordPnlToBatch(batchId, lt, ftot);
+        _recordPnlToBatch(batchId, lt, ftot, market.deltaEt);
 
         emit MarketPnlRecorded(marketId, batchId, lt, ftot);
         emit MarketSettledSecondary(marketId, settlementValue, settlementTick, market.settlementFinalizedAt);
@@ -513,28 +514,31 @@ contract MarketLifecycleModule is SignalsCoreStorage {
     }
 
     /**
-     * @notice Record P&L to daily batch
+     * @notice Record P&L and ΔEₜ to daily batch
      * @param batchId Batch identifier
      * @param lt P&L to add
      * @param ftot Fees to add
+     * @param deltaEt Market's tail budget to add to batch sum
      */
-    function _recordPnlToBatch(uint64 batchId, int256 lt, uint256 ftot) internal {
+    function _recordPnlToBatch(uint64 batchId, int256 lt, uint256 ftot, uint256 deltaEt) internal {
         DailyPnlSnapshot storage snap = _dailyPnl[batchId];
         if (snap.processed) revert CE.BatchAlreadyProcessed(batchId);
         snap.Lt += lt;
         snap.Ftot += ftot;
+        snap.DeltaEtSum += deltaEt;
     }
 
     /**
      * @notice Manually record P&L for a batch (admin/testing)
      * @dev Allows external P&L recording for testing or when trades
-     *      are processed off-chain
+     *      are processed off-chain.
      * @param batchId Batch identifier
      * @param lt P&L to add
      * @param ftot Fees to add
+     * @param deltaEt Tail budget to add to batch (for testing grant mechanics)
      */
-    function recordBatchPnl(uint64 batchId, int256 lt, uint256 ftot) external onlyDelegated {
-        _recordPnlToBatch(batchId, lt, ftot);
+    function recordBatchPnl(uint64 batchId, int256 lt, uint256 ftot, uint256 deltaEt) external onlyDelegated {
+        _recordPnlToBatch(batchId, lt, ftot, deltaEt);
         emit MarketPnlRecorded(0, batchId, lt, ftot);
     }
 
