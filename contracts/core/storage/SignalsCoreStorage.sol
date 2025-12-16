@@ -109,6 +109,9 @@ abstract contract SignalsCoreStorage {
         uint256 phiLP;           // ϕ_LP: LP residual fee share (WAD)
         uint256 phiBS;           // ϕ_BS: Backstop residual fee share (WAD)
         uint256 phiTR;           // ϕ_TR: Treasury residual fee share (WAD)
+        uint256 deltaEt;         // ΔEₜ: Tail budget (WAD). V1: 0 (uniform prior)
+                                 // Per WP v2: ΔEₜ := E_ent(q₀,t) - α_t ln n
+                                 // Uniform prior → ΔEₜ = 0 (no tail risk)
     }
 
     /// @notice Daily P&L snapshot for batch processing

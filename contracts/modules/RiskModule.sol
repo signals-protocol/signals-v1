@@ -35,13 +35,6 @@ contract RiskModule is SignalsCoreStorage {
     // ============================================================
 
     uint256 internal constant WAD = 1e18;
-    
-    /// @notice Pre-computed ln values for common bin counts (WAD precision)
-    /// @dev ln(n) values: ln(2)=0.693, ln(10)=2.303, ln(100)=4.605, ln(1000)=6.908
-    uint256 internal constant LN_2 = 693147180559945309;
-    uint256 internal constant LN_10 = 2302585092994045684;
-    uint256 internal constant LN_100 = 4605170185988091368;
-    uint256 internal constant LN_1000 = 6907755278982137052;
 
     // ============================================================
     // Modifiers
@@ -131,7 +124,8 @@ contract RiskModule is SignalsCoreStorage {
     ) external pure returns (uint256 alphaBase) {
         if (numBins <= 1) revert InvalidNumBins(numBins);
         
-        uint256 lnN = _lnWad(numBins);
+        // Use safe (upward-rounded) ln to ensure conservative α_base
+        uint256 lnN = FixedPointMathU.lnWadUp(numBins);
         if (lnN == 0) return type(uint256).max; // Edge case: n=1
         
         // αbase = λ * E_t / ln(n)
@@ -183,8 +177,8 @@ contract RiskModule is SignalsCoreStorage {
         uint256 Et = lpVault.nav;
         if (Et == 0) return 0;
         
-        // Calculate αbase
-        uint256 lnN = _lnWad(numBins);
+        // Calculate αbase with safe (upward-rounded) ln
+        uint256 lnN = FixedPointMathU.lnWadUp(numBins);
         if (lnN == 0) return type(uint256).max;
         uint256 alphaBase = lambda.wMul(Et).wDiv(lnN);
         
@@ -250,7 +244,8 @@ contract RiskModule is SignalsCoreStorage {
             revert AlphaExceedsLimit(marketAlpha, 0);
         }
         
-        uint256 lnN = _lnWad(numBins);
+        // Use safe (upward-rounded) ln for conservative α calculation
+        uint256 lnN = FixedPointMathU.lnWadUp(numBins);
         if (lnN == 0) return; // Edge case
         
         uint256 alphaBase = lambda.wMul(Et).wDiv(lnN);
@@ -275,50 +270,13 @@ contract RiskModule is SignalsCoreStorage {
     // ============================================================
 
     /**
-     * @notice Calculate natural log of n in WAD
-     * @dev Uses lookup table for common values, approximation for others
+     * @notice Calculate natural log of n in WAD (safe upper bound)
+     * @dev Uses FixedPointMathU.lnWadUp for conservative α calculation
      * @param n Input value (not WAD)
-     * @return Natural log of n in WAD precision
+     * @return Natural log of n in WAD precision (rounded up)
      */
     function lnWad(uint256 n) external pure returns (uint256) {
-        return _lnWad(n);
-    }
-
-    /**
-     * @notice Internal ln calculation
-     * @dev Lookup for common values, series approximation for others
-     */
-    function _lnWad(uint256 n) internal pure returns (uint256) {
-        if (n <= 1) return 0;
-        if (n == 2) return LN_2;
-        if (n == 10) return LN_10;
-        if (n == 100) return LN_100;
-        if (n == 1000) return LN_1000;
-        
-        // For other values, use approximation:
-        // ln(n) ≈ ln(10) * log10(n)
-        // log10(n) = number of digits - 1 + fractional part
-        // Simplified: count digits and interpolate
-        
-        uint256 digits = 0;
-        uint256 temp = n;
-        while (temp >= 10) {
-            temp /= 10;
-            digits++;
-        }
-        
-        // ln(n) ≈ digits * ln(10) + ln(temp)
-        // For temp in [1,10), use linear interpolation
-        uint256 baseLn = digits * LN_10;
-        
-        // Add fractional part: ln(temp) where temp in [1,10)
-        // ln(temp) ≈ (temp - 1) / temp * ln(10) / ln(10/e) (rough approximation)
-        // Simplified: ln(temp) ≈ (temp - 1) * LN_10 / 9 for temp in [1,10)
-        if (temp > 1) {
-            baseLn += ((temp - 1) * LN_10) / 9;
-        }
-        
-        return baseLn;
+        return FixedPointMathU.lnWadUp(n);
     }
 }
 

@@ -56,6 +56,12 @@ contract LPVaultModuleProxy is SignalsCoreStorage {
         capitalStack.treasuryNav = treasuryNav;
     }
 
+    /// @notice Set tail budget (ΔEₜ) for testing grant mechanics
+    /// @dev V1 default: 0 (uniform prior). Set to backstopNav to enable grants.
+    function setDeltaEt(uint256 deltaEt) external {
+        feeWaterfallConfig.deltaEt = deltaEt;
+    }
+
     // ============================================================
     // Seeding
     // ============================================================

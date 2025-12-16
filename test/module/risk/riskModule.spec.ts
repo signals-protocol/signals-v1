@@ -123,6 +123,67 @@ describe("RiskModule", () => {
   });
 
   // ============================================================
+  // lnWadUp Safety: Conservative (over-estimated) ln calculation
+  // ============================================================
+  describe("lnWadUp Safety (Phase 7 blocker fix)", () => {
+    it("returns ln(2) for n=2 (exact)", async () => {
+      const lnN = await riskModule.lnWad(2n);
+      // ln(2) ≈ 0.693147... WAD, but rounded UP for safety
+      expect(lnN).to.be.closeTo(ethers.parseEther("0.693147180559945310"), 10n);
+    });
+
+    it("returns ln(100) for n=100 (rounded up)", async () => {
+      const lnN = await riskModule.lnWad(100n);
+      // ln(100) ≈ 4.605170... WAD
+      expect(lnN).to.be.gte(ethers.parseEther("4.605170185988091368"));
+    });
+
+    it("uses next lookup value for non-exact n (over-estimates ln)", async () => {
+      // For n=75, should use ln(100) which over-estimates ln(75)
+      const ln75 = await riskModule.lnWad(75n);
+      const ln100 = await riskModule.lnWad(100n);
+      
+      // lnWadUp(75) should equal lnWadUp(100) since 50 < 75 <= 100
+      expect(ln75).to.equal(ln100);
+    });
+
+    it("over-estimated ln results in conservative (smaller) αbase", async () => {
+      const Et = ethers.parseEther("10000");
+      const numBins = 75n; // Will use ln(100) instead of exact ln(75)
+      
+      // αbase = λ * Et / ln(n)
+      // Over-estimated ln → smaller αbase → more conservative
+      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
+      
+      // Exact ln(75) ≈ 4.317 WAD
+      // Used ln(100) ≈ 4.605 WAD (over-estimated)
+      // This makes αbase smaller (safer)
+      
+      // If we used exact ln, αbase would be ~695
+      // Using over-estimated ln, αbase should be ~651
+      const lnUsed = await riskModule.lnWad(numBins);
+      const expectedAlphaBase = (LAMBDA * Et) / lnUsed;
+      
+      expect(alphaBase).to.equal(expectedAlphaBase);
+      // αbase should be less than if we used exact ln(75)
+      const exactLn75 = ethers.parseEther("4.317488"); // Approximate
+      const alphaBaseExact = (LAMBDA * Et) / exactLn75;
+      expect(alphaBase).to.be.lt(alphaBaseExact);
+    });
+
+    it("handles large numBins safely", async () => {
+      const lnLarge = await riskModule.lnWad(50000n);
+      // Should use digits-based upper bound for n > 10000
+      expect(lnLarge).to.be.gt(0n);
+    });
+
+    it("returns 0 for n=1 (edge case)", async () => {
+      const ln1 = await riskModule.lnWad(1n);
+      expect(ln1).to.equal(0n);
+    });
+  });
+
+  // ============================================================
   // 7-0.5: ΔEₜ (Tail Budget) Calculation
   // ============================================================
   describe("7-0.5: ΔEₜ (Tail Budget) Calculation", () => {

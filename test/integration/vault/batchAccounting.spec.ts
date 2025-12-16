@@ -66,6 +66,11 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
   async function deploySeededVaultFixture() {
     const fixture = await deployVaultFixture();
     await fixture.proxy.connect(fixture.owner).seedVault(usdc("1000"));
+    // V1 Phase 7: Set backstop and deltaEt for testing grant mechanics
+    // Production V1 uses deltaEt = 0 (uniform prior), but tests need to verify grant flow
+    const backstopNav = ethers.parseEther("500"); // 500 WAD backstop
+    await fixture.proxy.setCapitalStack(backstopNav, 0n);
+    await fixture.proxy.setDeltaEt(backstopNav);
     const currentBatchId = await fixture.proxy.getCurrentBatchId();
     return { ...fixture, currentBatchId };
   }

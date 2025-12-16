@@ -71,7 +71,11 @@ describe("VaultBatchFlow Integration", () => {
     await proxy.connect(userA).seedVault(usdc("1000"));
     // WP v2: Initialize backstopNav for deltaEt calculation
     // This ensures FeeWaterfall doesn't revert on grantNeed > deltaEt
-    await proxy.setCapitalStack(ethers.parseEther("500"), 0n); // 500 WAD backstop
+    const backstopNav = ethers.parseEther("500"); // 500 WAD backstop
+    await proxy.setCapitalStack(backstopNav, 0n);
+    // V1 Phase 7: Set deltaEt = backstopNav for testing grant mechanics
+    // Production V1 uses deltaEt = 0 (uniform prior), but tests need to verify grant flow
+    await proxy.setDeltaEt(backstopNav);
     const currentBatchId = await proxy.getCurrentBatchId();
     const firstBatchId = currentBatchId + 1n;
     return { ...fixture, currentBatchId, firstBatchId };

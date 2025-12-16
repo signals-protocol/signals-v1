@@ -409,24 +409,28 @@ contract LPVaultModule is SignalsCoreStorage {
      *      ΔE_t := E_ent(q₀,t) - α_t ln n
      *      where E_ent is entropy budget from opening prior q₀,t
      *
-     *      For uniform prior (q₀,t = 0): ΔE_t = 0 (no tail risk)
-     *      For concentrated priors: ΔE_t > 0 (additional tail risk)
+     *      V1 DESIGN DECISION: Uniform prior only
+     *      ==========================================
+     *      For uniform prior (q₀,t = 0): E_ent = α ln n, so ΔE_t = 0
+     *      This means NO additional tail risk beyond what α bounds already guarantee.
      *
-     *      Admissibility constraint: ΔE_t ≤ B^eff_{t-1}
-     *      Grant rule: G^need_t > ΔE_t causes batch revert (Safety invariant)
+     *      Combined with α ≤ αbase = λE/ln(n) enforcement (Phase 7),
+     *      uniform prior ensures worst-case loss ≤ λE, so drawdown floor
+     *      (pdd = -λ) is ALWAYS satisfied without backstop grants.
      *
-     *      PHASE 7 TODO: Replace this placeholder with actual prior-based calculation.
-     *      Current implementation returns backstopNav as a conservative upper bound,
-     *      but this is NOT the correct ΔE_t definition per whitepaper.
+     *      Safety invariant: If grantNeed > ΔE_t, the batch MUST revert.
+     *      This indicates α bounds were violated or an unexpected loss occurred.
+     *
+     *      The deltaEt value can be set via feeWaterfallConfig.deltaEt:
+     *      - Production V1: 0 (uniform prior, no tail risk)
+     *      - Testing: Can be set to backstopNav or other values to test grant mechanics
+     *      - Future: Will be calculated from actual prior weights
      *
      * @return deltaEt Tail budget for grant calculation (WAD)
      */
     function _getDeltaEt() internal view returns (uint256) {
-        // FIXME(Phase 7): Implement prior-based ΔE_t calculation
-        // For v1 with uniform priors, ΔE_t should be 0.
-        // Using backstopNav as placeholder allows testing of grant mechanics,
-        // but violates whitepaper definition.
-        return capitalStack.backstopNav;
+        // Return configured deltaEt (default 0 for V1 uniform prior)
+        return feeWaterfallConfig.deltaEt;
     }
 
     /**

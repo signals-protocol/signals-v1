@@ -579,6 +579,9 @@ contract TradeModule is SignalsCoreStorage {
     /// @notice Validate market α against safety limit
     /// @dev Per WP v2 Sec 4.5: αlimit,t = max{0, αbase,t * (1 - k * DD_t)}
     ///      Only called for open/increase (close/decrease always allowed)
+    ///      
+    ///      SAFETY: Uses lnWadUp for conservative α_base calculation.
+    ///      Over-estimating ln(n) → under-estimating α_base → safer bounds.
     function _validateAlpha(ISignalsCore.Market storage market) internal view {
         if (!riskConfig.enforceAlpha) return; // Skip if not enforced
         if (lpVault.nav == 0) return; // Skip if vault not seeded
@@ -586,8 +589,8 @@ contract TradeModule is SignalsCoreStorage {
         uint256 alpha = market.liquidityParameter;
         uint256 numBins = market.numBins;
         
-        // Calculate αbase = λ * E_t / ln(n)
-        uint256 lnN = _lnWad(numBins);
+        // Calculate αbase = λ * E_t / ln(n) with safe (upward-rounded) ln
+        uint256 lnN = FixedPointMathU.lnWadUp(numBins);
         if (lnN == 0) return; // Edge case: n <= 1
         
         uint256 alphaBase = riskConfig.lambda.wMul(lpVault.nav).wDiv(lnN);
@@ -605,30 +608,6 @@ contract TradeModule is SignalsCoreStorage {
         if (alpha > alphaLimit) {
             revert CE.AlphaExceedsLimit(alpha, alphaLimit);
         }
-    }
-
-    /// @notice Calculate natural log of n in WAD
-    /// @dev Uses lookup table for common values
-    function _lnWad(uint256 n) internal pure returns (uint256) {
-        if (n <= 1) return 0;
-        if (n == 2) return 693147180559945309;   // ln(2)
-        if (n == 10) return 2302585092994045684;  // ln(10)
-        if (n == 100) return 4605170185988091368; // ln(100)
-        if (n == 1000) return 6907755278982137052; // ln(1000)
-        
-        // Approximation for other values
-        uint256 digits = 0;
-        uint256 temp = n;
-        while (temp >= 10) {
-            temp /= 10;
-            digits++;
-        }
-        
-        uint256 baseLn = digits * 2302585092994045684; // digits * ln(10)
-        if (temp > 1) {
-            baseLn += ((temp - 1) * 2302585092994045684) / 9;
-        }
-        return baseLn;
     }
 
     // --- Exposure Ledger helpers (Phase 6) ---
