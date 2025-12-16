@@ -108,12 +108,13 @@ contract LPVaultModuleProxy is SignalsCoreStorage {
     // Batch Processing
     // ============================================================
 
-    function recordDailyPnl(uint64 batchId, int256 lt, uint256 ftot) external {
+    function recordDailyPnl(uint64 batchId, int256 lt, uint256 ftot, uint256 deltaEt) external {
         _delegate(abi.encodeWithSelector(
             LPVaultModule.recordDailyPnl.selector,
             batchId,
             lt,
-            ftot
+            ftot,
+            deltaEt
         ));
     }
 

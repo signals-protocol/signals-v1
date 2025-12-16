@@ -109,16 +109,7 @@ contract SignalsCore is
         capitalStack.treasuryNav = treasuryNav;
     }
 
-    /// @notice Set tail budget (ΔEₜ) for grant calculations
-    /// @dev Per whitepaper v2: ΔEₜ := E_ent(q₀,t) - α_t ln n
-    ///      V1 (uniform prior): ΔEₜ = 0 (default)
-    ///      For testing grant mechanics, can be set to backstopNav or other values
-    /// @param deltaEt Tail budget in WAD (0 = uniform prior, no tail risk)
-    function setDeltaEt(uint256 deltaEt) external onlyOwner whenNotPaused {
-        feeWaterfallConfig.deltaEt = deltaEt;
-    }
-
-    /// @notice Configure risk parameters for α Safety Bounds (Phase 7)
+    /// @notice Configure risk parameters for α Safety Bounds
     /// @dev Per whitepaper v2: pdd := -λ (drawdown floor equals negative lambda)
     ///      This function enforces the relationship by auto-updating pdd when lambda is set.
     /// @param lambda λ: Safety parameter (WAD), e.g., 0.3e18 = 30% max drawdown
