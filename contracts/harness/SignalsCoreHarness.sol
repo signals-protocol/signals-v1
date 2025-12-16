@@ -113,6 +113,36 @@ contract SignalsCoreHarness is SignalsCore {
     }
 
     // ============================================================
+    // Phase 7: LP Vault state helpers for testing
+    // ============================================================
+
+    /// @notice Set LP vault state directly for testing α safety with drawdown
+    function harnessSetLpVault(
+        uint256 nav,
+        uint256 shares,
+        uint256 price,
+        uint256 pricePeak,
+        bool isSeeded
+    ) external onlyOwner {
+        lpVault.nav = nav;
+        lpVault.shares = shares;
+        lpVault.price = price;
+        lpVault.pricePeak = pricePeak;
+        lpVault.isSeeded = isSeeded;
+    }
+
+    /// @notice Get current LP vault state
+    function harnessGetLpVault() external view returns (
+        uint256 nav,
+        uint256 shares,
+        uint256 price,
+        uint256 pricePeak,
+        bool isSeeded
+    ) {
+        return (lpVault.nav, lpVault.shares, lpVault.price, lpVault.pricePeak, lpVault.isSeeded);
+    }
+
+    // ============================================================
     // Phase 7: Backward-compatible createMarket for tests
     // ============================================================
 
@@ -149,5 +179,18 @@ contract SignalsCoreHarness is SignalsCore {
             factors
         ));
         if (ret.length > 0) marketId = abi.decode(ret, (uint256));
+    }
+
+    /// @dev Set market failed state for testing reopenMarket
+    function harnessSetMarketFailed(uint256 marketId, bool failed) external onlyOwner {
+        markets[marketId].failed = failed;
+        if (failed) {
+            markets[marketId].settled = false;
+        }
+    }
+
+    /// @dev Set market settled state for testing
+    function harnessSetMarketSettled(uint256 marketId, bool settled) external onlyOwner {
+        markets[marketId].settled = settled;
     }
 }

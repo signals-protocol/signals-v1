@@ -89,15 +89,18 @@ contract SignalsCore is
         withdrawalLagBatches = lag;
     }
 
+    /// @notice Configure fee waterfall parameters (except pdd)
+    /// @dev Per WP v2: pdd := -λ is enforced via setRiskConfig to maintain Safety invariant.
+    ///      This function does NOT accept pdd parameter to prevent breaking the invariant.
+    ///      Use setRiskConfig to change drawdown floor (via λ).
     function setFeeWaterfallConfig(
-        int256 pdd,
         uint256 rhoBS,
         uint256 phiLP,
         uint256 phiBS,
         uint256 phiTR
     ) external onlyOwner whenNotPaused {
         if (phiLP + phiBS + phiTR != WAD) revert InvalidFeeSplitSum(phiLP, phiBS, phiTR);
-        feeWaterfallConfig.pdd = pdd;
+        // pdd is NOT set here - it's controlled by setRiskConfig (pdd := -λ)
         feeWaterfallConfig.rhoBS = rhoBS;
         feeWaterfallConfig.phiLP = phiLP;
         feeWaterfallConfig.phiBS = phiBS;
@@ -112,7 +115,8 @@ contract SignalsCore is
     /// @notice Configure risk parameters for α Safety Bounds
     /// @dev Per whitepaper v2: pdd := -λ (drawdown floor equals negative lambda)
     ///      This function enforces the relationship by auto-updating pdd when lambda is set.
-    /// @param lambda λ: Safety parameter (WAD), e.g., 0.3e18 = 30% max drawdown
+    ///      WP v2: λ ∈ (0, 1) is required for safety invariants.
+    /// @param lambda λ: Safety parameter (WAD), e.g., 0.3e18 = 30% max drawdown. Must be in (0, 1).
     /// @param kDrawdown k: Drawdown sensitivity factor (WAD), typically 1.0e18
     /// @param enforceAlpha Whether to enforce α bounds at market configuration time (create/reopen)
     function setRiskConfig(
@@ -120,6 +124,11 @@ contract SignalsCore is
         uint256 kDrawdown,
         bool enforceAlpha
     ) external onlyOwner whenNotPaused {
+        // WP v2: λ must be in (0, 1) for safety invariants
+        // λ = 0 would mean no drawdown limit (unsafe)
+        // λ >= 1 would mean floor cannot be maintained (100%+ drop allowed is meaningless)
+        if (lambda == 0 || lambda >= WAD) revert CE.InvalidLambda(lambda);
+
         riskConfig.lambda = lambda;
         riskConfig.kDrawdown = kDrawdown;
         riskConfig.enforceAlpha = enforceAlpha;

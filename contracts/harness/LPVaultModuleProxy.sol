@@ -37,14 +37,27 @@ contract LPVaultModuleProxy is SignalsCoreStorage {
         withdrawalLagBatches = lag;
     }
 
+    /// @notice Set risk config with pdd := -λ invariant (WP v2)
+    function setRiskConfig(
+        uint256 lambda,
+        uint256 kDrawdown,
+        bool enforceAlpha
+    ) external {
+        riskConfig.lambda = lambda;
+        riskConfig.kDrawdown = kDrawdown;
+        riskConfig.enforceAlpha = enforceAlpha;
+        // WP v2: pdd := -λ
+        feeWaterfallConfig.pdd = -int256(lambda);
+    }
+
+    /// @dev Per WP v2: pdd := -λ is enforced via setRiskConfig. This function does NOT accept pdd.
     function setFeeWaterfallConfig(
-        int256 pdd,
         uint256 rhoBS,
         uint256 phiLP,
         uint256 phiBS,
         uint256 phiTR
     ) external {
-        feeWaterfallConfig.pdd = pdd;
+        // pdd is NOT set here - it's controlled by setRiskConfig (pdd := -λ)
         feeWaterfallConfig.rhoBS = rhoBS;
         feeWaterfallConfig.phiLP = phiLP;
         feeWaterfallConfig.phiBS = phiBS;

@@ -6,12 +6,20 @@ import "../lib/FixedPointMathU.sol";
 import "../errors/ModuleErrors.sol";
 
 /// @title RiskModule
-/// @notice Delegate-only module for safety bound enforcement (Phase 7)
-/// @dev Implements whitepaper v2 Sec 4.1-4.5:
+/// @notice Delegate-only module providing Risk calculation helpers (Phase 7)
+/// @dev Implements whitepaper v2 Sec 4.1-4.5 calculation functions:
 ///      - ΔEₜ (tail budget) calculation from prior
-///      - αbase/αlimit calculation
+///      - αbase/αlimit calculation with drawdown
 ///      - Prior admissibility check
-///      (No per-trade α hooks; α is enforced only at market creation)
+///
+///      IMPORTANT: This module provides CALCULATIONS only.
+///      Actual enforcement (revert on violations) is done in MarketLifecycleModule:
+///      - createMarket: calls _validateAlphaForMarket, _validatePriorAdmissibility
+///      - reopenMarket: re-validates α and prior
+///
+///      This separation allows:
+///      - Unit testing of calculations independently
+///      - Clear separation of concerns (compute vs enforce)
 contract RiskModule is SignalsCoreStorage {
     using FixedPointMathU for uint256;
 
@@ -89,14 +97,15 @@ contract RiskModule is SignalsCoreStorage {
 
     /**
      * @notice Get current tail budget for batch processing
-     * @dev Called by LPVaultModule.processDailyBatch()
-     *      V1 with uniform priors returns 0 (no tail risk)
-     * @return deltaEt Tail budget for current state (WAD)
+     * @dev DEPRECATED: ΔEₜ is now calculated and stored per-market in createMarket().
+     *      Batch processing uses DailyPnlSnapshot.DeltaEtSum which accumulates
+     *      market.deltaEt at settlement time.
+     *      This function is kept for backward compatibility but always returns 0.
+     * @return deltaEt Always 0 (use market.deltaEt instead)
      */
     function getDeltaEt() external view onlyDelegated returns (uint256) {
-        // Phase 7 V1: Uniform prior only → ΔEₜ = 0
-        // This means grant rule becomes: grantNeed > 0 can always proceed
-        // (until we add concentrated prior support)
+        // DEPRECATED: Per-market ΔEₜ is stored in Market.deltaEt
+        // and accumulated to DailyPnlSnapshot.DeltaEtSum at settlement
         return 0;
     }
 
