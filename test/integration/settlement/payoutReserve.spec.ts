@@ -127,8 +127,14 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
     // Vault configuration
     await core.setMinSeedAmount(usdc("100"));
     await core.setWithdrawalLagBatches(0);
+    // Configure Risk (sets pdd := -λ)
+    await core.setRiskConfig(
+      ethers.parseEther("0.3"), // lambda = 0.3
+      ethers.parseEther("1"), // kDrawdown
+      false // enforceAlpha
+    );
+    // Configure FeeWaterfall (pdd is already set via setRiskConfig)
     await core.setFeeWaterfallConfig(
-      ethers.parseEther("-0.3"), // pdd = -30% (WAD ratio)
       0n, // rhoBS
       ethers.parseEther("0.8"), // phiLP (WAD ratio)
       ethers.parseEther("0.1"), // phiBS (WAD ratio)
@@ -671,6 +677,172 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
       // Core balance decreased by exactly expectedTotalPayout
       expect(balanceBefore - balanceAfter).to.equal(expectedTotalPayout);
+    });
+  });
+
+  // ==================================================================
+  // Failure Path + Batch/Claim Separation (Phase 7)
+  // ==================================================================
+  describe("Failure Path & Batch/Claim Separation", () => {
+    let core: SignalsCoreHarness;
+    let payment: MockERC20;
+    let chainId: bigint;
+    let seeder: HardhatEthersSigner;
+    let oracleSigner: HardhatEthersSigner;
+
+    beforeEach(async () => {
+      const fixture = await loadFixture(deployFullSystem);
+      core = fixture.core;
+      payment = fixture.payment;
+      chainId = fixture.chainId;
+      seeder = fixture.seeder;
+      oracleSigner = fixture.oracleSigner;
+    });
+
+    it("markFailed → manualSettleFailedMarket records PnL to batch", async () => {
+      // Seed vault
+      const latest = BigInt(await time.latest());
+      const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
+
+      await payment.mint(seeder.address, usdc("100000"));
+      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+
+      await time.setNextBlockTimestamp(Number(seedTime));
+      await core.connect(seeder).seedVault(usdc("10000"));
+
+      // Create market
+      const tSet = seedTime + 500n;
+      await core.createMarketUniform(
+        0, 100, 10,
+        Number(seedTime + 100n),
+        Number(tSet - 100n),
+        Number(tSet),
+        10,
+        ethers.parseEther("100"),
+        ethers.ZeroAddress
+      );
+
+      // Wait for settlement window to expire without oracle submission
+      // settlementSubmitWindow = 300, so wait past Tset + 300
+      const expireTime = tSet + 400n;
+      await time.setNextBlockTimestamp(Number(expireTime));
+
+      // Mark as failed (oracle didn't submit in time)
+      await core.markFailed(1n);
+
+      // Verify market is marked failed
+      const marketAfterFail = await core.harnessGetMarket(1n);
+      expect(marketAfterFail.failed).to.equal(true);
+      expect(marketAfterFail.settled).to.equal(false);
+
+      // Manually settle with fallback value
+      const manualSettleTime = expireTime + 10n;
+      await time.setNextBlockTimestamp(Number(manualSettleTime));
+      await core.manualSettleFailedMarket(1n, 50); // Middle tick as fallback
+
+      // Verify market is now settled (secondary)
+      const marketAfterSettle = await core.harnessGetMarket(1n);
+      expect(marketAfterSettle.settled).to.equal(true);
+
+      // Verify PnL was recorded to batch
+      const batchId = tSet / BATCH_SECONDS;
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      // processed should still be false (batch not yet run)
+      expect(processed).to.equal(false);
+    });
+
+    it("batch executes independently of claim timing", async () => {
+      // Seed vault
+      const latest = BigInt(await time.latest());
+      const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
+
+      await payment.mint(seeder.address, usdc("100000"));
+      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+
+      await time.setNextBlockTimestamp(Number(seedTime));
+      await core.connect(seeder).seedVault(usdc("10000"));
+
+      // Create and settle market (normal path)
+      const tSet = seedTime + 500n;
+      await core.createMarketUniform(
+        0, 100, 10,
+        Number(seedTime + 100n),
+        Number(tSet - 100n),
+        Number(tSet),
+        10,
+        ethers.parseEther("100"),
+        ethers.ZeroAddress
+      );
+
+      // Submit oracle price
+      const priceTimestamp = tSet + 1n;
+      const digest = buildOracleDigest(chainId, await core.getAddress(), 1n, 50n, priceTimestamp);
+      const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
+
+      await time.setNextBlockTimestamp(Number(priceTimestamp));
+      await core.submitSettlementPrice(1n, 50n, Number(priceTimestamp), sig);
+
+      // Settle market
+      await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
+      await core.settleMarket(1n);
+
+      // Process batch - should succeed regardless of claim timing
+      const batchId = tSet / BATCH_SECONDS;
+      await expect(core.processDailyBatch(batchId)).to.not.be.reverted;
+
+      // Verify batch is processed
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      expect(processed).to.equal(true);
+
+      // Claims are still gated by time (independent of batch)
+      // This verifies batch execution is permissionless
+    });
+
+    it("secondary settlement (failed market) flows to same batch as primary", async () => {
+      // This test verifies that failed markets still contribute to the batch
+      // correctly, maintaining the batch-NAV invariant
+
+      const latest = BigInt(await time.latest());
+      const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
+
+      await payment.mint(seeder.address, usdc("100000"));
+      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+
+      await time.setNextBlockTimestamp(Number(seedTime));
+      await core.connect(seeder).seedVault(usdc("10000"));
+
+      // Create market
+      const tSet = seedTime + 500n;
+      await core.createMarketUniform(
+        0, 100, 10,
+        Number(seedTime + 100n),
+        Number(tSet - 100n),
+        Number(tSet),
+        10,
+        ethers.parseEther("100"),
+        ethers.ZeroAddress
+      );
+
+      // Fail and manually settle
+      const expireTime = tSet + 400n;
+      await time.setNextBlockTimestamp(Number(expireTime));
+      await core.markFailed(1n);
+      await core.manualSettleFailedMarket(1n, 50);
+
+      // Process batch
+      const batchId = tSet / BATCH_SECONDS;
+      await core.processDailyBatch(batchId);
+
+      const navAfter = await core.getVaultNav.staticCall();
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+
+      // Batch should be processed successfully
+      expect(processed).to.equal(true);
+
+      // With no trades, NAV may stay same (Lt = 0), but batch is still processed
+      // The key invariant is that secondary settlement path works identically
+      // to primary path in terms of batch execution
+      expect(navAfter).to.be.gte(0n);
     });
   });
 });

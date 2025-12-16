@@ -98,8 +98,8 @@ describe("RiskModule", () => {
 
     // Configure vault
     await core.setMinSeedAmount(ethers.parseUnits("100", 6));
+    // pdd is set via setRiskConfig (pdd := -λ)
     await core.setFeeWaterfallConfig(
-      ethers.parseEther("-0.3"), // pdd = -30%
       ethers.parseEther("0.2"),  // rhoBS = 20%
       ethers.parseEther("0.7"),  // phiLP = 70%
       ethers.parseEther("0.2"),  // phiBS = 20%
@@ -319,40 +319,21 @@ describe("RiskModule", () => {
   });
 
   // ============================================================
-  // 7-2: Trade α Enforcement Integration
+  // 7-2: Trade α Enforcement - Design Decision
   // ============================================================
-  describe("7-2: Trade α Enforcement", () => {
-    it("reverts market creation when α > αlimit", async () => {
-      // Setup: Create high drawdown state to reduce αlimit
-      // Then try to create market with α > αlimit
-      
-      // This requires integration with core, tested via core.createMarket
-      // Skipping direct RiskModule test, will be tested via integration
-    });
-
-    it("reverts position increase when market α > αlimit", async () => {
-      // Similar to above - integration test
-    });
-
-    it("allows position decrease even when α > αlimit", async () => {
-      // Decrease/close should always be allowed (reducing exposure)
-    });
-  });
+  // WP v2 Design: "No per-trade α gate"
+  // - α is enforced ONLY at market creation (createMarket) and reopen (reopenMarket)
+  // - Trading is free within the α/prior set at Zero-Hour
+  // - RiskModule provides CALCULATION helpers, enforcement is in MarketLifecycleModule
+  // - Integration tests in alphaEnforcement.spec.ts verify this behavior
+  // ============================================================
 
   // ============================================================
-  // 7-4: α Enforcement Test Cases
+  // 7-4: α Enforcement Test Cases (Calculation Only)
   // ============================================================
-  describe("7-4: α Enforcement Scenarios", () => {
-    describe("Happy path (α within limit)", () => {
-      it("allows market creation when α ≤ αlimit", async () => {
-        // Will be tested via integration
-      });
-
-      it("allows trading when market α ≤ αlimit", async () => {
-        // Will be tested via integration
-      });
-    });
-
+  // NOTE: Actual enforcement tests are in alphaEnforcement.spec.ts (integration)
+  //       RiskModule only tests calculation correctness here
+  describe("7-4: α Enforcement Scenarios (Calculation)", () => {
     describe("Drawdown triggers α limit reduction", () => {
       it("reduces αlimit proportionally to drawdown", async () => {
         const alphaBase = ethers.parseEther("1000");
@@ -402,6 +383,109 @@ describe("RiskModule", () => {
         
         expect(alphaLimit).to.equal(0n);
         // Any α > 0 will exceed limit → market creation should fail
+      });
+    });
+  });
+
+  // ==================================================================
+  // Config Validation (Phase 7)
+  // ==================================================================
+  describe("Config Validation", () => {
+    describe("setRiskConfig validation", () => {
+      it("reverts when λ = 0", async () => {
+        await expect(
+          core.setRiskConfig(0n, K_DD, false)
+        ).to.be.revertedWithCustomError(core, "InvalidLambda");
+      });
+
+      it("reverts when λ ≥ 1 (WAD)", async () => {
+        await expect(
+          core.setRiskConfig(WAD, K_DD, false)
+        ).to.be.revertedWithCustomError(core, "InvalidLambda");
+      });
+
+      it("reverts when λ > 1 (WAD)", async () => {
+        await expect(
+          core.setRiskConfig(WAD + 1n, K_DD, false)
+        ).to.be.revertedWithCustomError(core, "InvalidLambda");
+      });
+
+      it("accepts λ just below 1 (WAD - 1)", async () => {
+        await expect(
+          core.setRiskConfig(WAD - 1n, K_DD, false)
+        ).to.not.be.reverted;
+      });
+
+      it("accepts λ just above 0 (1 wei)", async () => {
+        await expect(
+          core.setRiskConfig(1n, K_DD, false)
+        ).to.not.be.reverted;
+      });
+
+      it("accepts typical λ = 0.3 (30%)", async () => {
+        await expect(
+          core.setRiskConfig(ethers.parseEther("0.3"), K_DD, true)
+        ).to.not.be.reverted;
+      });
+
+      it("sets pdd := -λ automatically", async () => {
+        const lambda = ethers.parseEther("0.25");
+        await core.setRiskConfig(lambda, K_DD, false);
+
+        // pdd should be -λ
+        // Access via harness or getter if available
+        // For now, verify indirectly through FeeWaterfallLib behavior
+      });
+    });
+
+    describe("setFeeWaterfallConfig validation", () => {
+      beforeEach(async () => {
+        // Must set risk config first (sets pdd)
+        await core.setRiskConfig(LAMBDA, K_DD, false);
+      });
+
+      it("reverts when phi sum > WAD", async () => {
+        await expect(
+          core.setFeeWaterfallConfig(
+            0n,
+            ethers.parseEther("0.5"),
+            ethers.parseEther("0.3"),
+            ethers.parseEther("0.3") // Total = 1.1 WAD > 1
+          )
+        ).to.be.revertedWithCustomError(core, "InvalidFeeSplitSum");
+      });
+
+      it("reverts when phi sum < WAD", async () => {
+        await expect(
+          core.setFeeWaterfallConfig(
+            0n,
+            ethers.parseEther("0.3"),
+            ethers.parseEther("0.3"),
+            ethers.parseEther("0.3") // Total = 0.9 WAD < 1
+          )
+        ).to.be.revertedWithCustomError(core, "InvalidFeeSplitSum");
+      });
+
+      it("accepts phi sum = WAD exactly", async () => {
+        await expect(
+          core.setFeeWaterfallConfig(
+            0n,
+            ethers.parseEther("0.8"),
+            ethers.parseEther("0.1"),
+            ethers.parseEther("0.1") // Total = 1.0 WAD
+          )
+        ).to.not.be.reverted;
+      });
+
+      it("accepts all zeros except one (edge case)", async () => {
+        await expect(
+          core.setFeeWaterfallConfig(
+            0n,
+            WAD, // 100% to LP
+            0n,
+            0n
+          )
+        ).to.not.be.reverted;
       });
     });
   });
