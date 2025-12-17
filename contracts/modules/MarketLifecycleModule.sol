@@ -396,13 +396,21 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         return markets[marketId].numBins > 0;
     }
 
-    /// @dev Convert settlement value to tick (WP v2 Eq 6.1)
-    /// settlementTick = settlementValue / 1e6 (like v0)
+    /// @dev Convert settlement value to tick
+    /// settlementTick = settlementValue / 1e6
+    /// maxTick is exclusive upper bound, clamp to last valid tick
     function _toSettlementTick(ISignalsCore.Market memory market, int256 settlementValue) internal pure returns (int256) {
         int256 spacing = market.tickSpacing;
         int256 tick = settlementValue / 1_000_000; // Convert 6-decimal value to tick
+        
+        // Clamp to valid range [minTick, maxTick - tickSpacing]
+        // maxTick is exclusive (outcome space is [minTick, maxTick))
+        // Last valid tick is maxTick - tickSpacing
+        int256 lastValidTick = market.maxTick - spacing;
         if (tick < market.minTick) tick = market.minTick;
-        if (tick > market.maxTick) tick = market.maxTick;
+        if (tick > lastValidTick) tick = lastValidTick;
+        
+        // Align to tick spacing
         int256 offset = tick - market.minTick;
         tick = market.minTick + (offset / spacing) * spacing;
         return tick;
