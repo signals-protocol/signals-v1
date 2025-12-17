@@ -11,13 +11,20 @@ interface CLMSRErrors {
     error MarketNotFound(uint256 marketId);
     error MarketAlreadySettled(uint256 marketId);
     error MarketAlreadyExists(uint256 marketId);
-    error SettlementTooEarly(uint64 requiredTimestamp, uint64 currentTimestamp);
-    error SettlementFinalizeWindowClosed(uint64 requiredTimestamp, uint64 currentTimestamp);
+    error OracleSampleTooEarly(uint64 requiredTimestamp, uint64 currentTimestamp);
+    error ClaimTooEarly(uint64 claimOpenTimestamp, uint64 currentTimestamp);
     error SettlementOracleCandidateMissing();
     error SettlementOracleSignatureInvalid(address signer);
     error MarketNotFailed(uint256 marketId);
     error MarketAlreadyFailed(uint256 marketId);
     error SettlementWindowNotExpired(uint64 deadline, uint64 currentTime);
+    /* Phase 8: Redstone/closest-sample errors */
+    error OracleSampleTooFarFromTset(uint64 distance, uint64 maxAllowed);
+    error OracleSampleInFuture(uint64 priceTimestamp, uint64 blockTimestamp);
+    error SettlementWindowClosed();
+    error PendingOpsNotStarted();
+    error NotInPendingOps();
+    error MarketAlreadyFinalized(uint256 marketId);
     error BatchAlreadyProcessed(uint64 batchId);
     error BatchNotProcessed(uint64 batchId);
     error BatchAlreadyHasMarket(uint64 batchId, uint256 existingMarketId);
@@ -98,13 +105,20 @@ library CE {
     error MarketNotFound(uint256 marketId);
     error MarketAlreadySettled(uint256 marketId);
     error MarketAlreadyExists(uint256 marketId);
-    error SettlementTooEarly(uint64 requiredTimestamp, uint64 currentTimestamp);
-    error SettlementFinalizeWindowClosed(uint64 requiredTimestamp, uint64 currentTimestamp);
+    error OracleSampleTooEarly(uint64 requiredTimestamp, uint64 currentTimestamp);
+    error ClaimTooEarly(uint64 claimOpenTimestamp, uint64 currentTimestamp);
     error SettlementOracleCandidateMissing();
     error SettlementOracleSignatureInvalid(address signer);
     error MarketNotFailed(uint256 marketId);
     error MarketAlreadyFailed(uint256 marketId);
     error SettlementWindowNotExpired(uint64 deadline, uint64 currentTime);
+    /* Phase 8: Redstone/closest-sample errors */
+    error OracleSampleTooFarFromTset(uint64 distance, uint64 maxAllowed);
+    error OracleSampleInFuture(uint64 priceTimestamp, uint64 blockTimestamp);
+    error SettlementWindowClosed();
+    error PendingOpsNotStarted();
+    error NotInPendingOps();
+    error MarketAlreadyFinalized(uint256 marketId);
     error BatchAlreadyProcessed(uint64 batchId);
     error BatchNotProcessed(uint64 batchId);
     error BatchAlreadyHasMarket(uint64 batchId, uint256 existingMarketId);

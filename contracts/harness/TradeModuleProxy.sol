@@ -29,7 +29,7 @@ contract TradeModuleProxy is SignalsCoreStorage {
         paymentToken = IERC20(payment);
         positionContract = ISignalsPosition(position);
         settlementSubmitWindow = submitWindow;
-        settlementFinalizeDeadline = finalizeDeadline;
+        claimDelaySeconds = finalizeDeadline;
         feeRecipient = _feeRecipient;
         defaultFeePolicy = _defaultFeePolicy;
     }

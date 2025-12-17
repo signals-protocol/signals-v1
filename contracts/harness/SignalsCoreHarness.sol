@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import "../core/SignalsCore.sol";
 import "../lib/LazyMulSegmentTree.sol";
+import "../lib/ExposureFenwickLib.sol";
+import "../lib/TickBinLib.sol";
 import "../interfaces/IRiskModule.sol";
 
 /// @notice Harness extending SignalsCore with helpers to seed markets/trees for tests.
@@ -44,22 +46,38 @@ contract SignalsCoreHarness is SignalsCore {
     }
 
     // ============================================================
-    // Phase 6: Exposure Ledger test helpers
+    // Phase 6: Exposure Ledger test helpers (Fenwick-based)
     // ============================================================
 
     /**
-     * @notice Set exposure at a specific tick for testing
-     * @dev Used in spec tests to simulate position creation without full trade flow
+     * @notice Set exposure at a specific tick for testing (Fenwick-based)
+     * @dev Computes delta from current exposure and applies it via Fenwick rangeAdd
      * @param marketId Market identifier
-     * @param tick Settlement tick
-     * @param exposure Total exposure at this tick (token units)
+     * @param tick Settlement tick (must be aligned to tickSpacing)
+     * @param exposure Target exposure at this tick (token units)
      */
     function harnessSetExposure(uint256 marketId, int256 tick, uint256 exposure) external onlyOwner {
-        _exposureLedger[marketId][tick] = exposure;
+        ISignalsCore.Market memory market = markets[marketId];
+        uint32 bin = TickBinLib.tickToBin(market, tick);
+        
+        // Get current exposure via Fenwick point query
+        int256 current = ExposureFenwickLib.rawPrefixSum(_exposureFenwick[marketId], bin);
+        int256 delta = int256(exposure) - current;
+        
+        // Apply delta to single bin [bin, bin]
+        if (delta != 0) {
+            ExposureFenwickLib.rangeAdd(
+                _exposureFenwick[marketId],
+                bin,
+                bin,
+                delta,
+                market.numBins
+            );
+        }
     }
 
     /**
-     * @notice Add exposure to a range of ticks (simulates openPosition)
+     * @notice Add exposure to a range of ticks (Fenwick-based, simulates openPosition)
      * @param marketId Market identifier
      * @param lowerTick Lower bound (inclusive)
      * @param upperTick Upper bound (exclusive)
@@ -71,18 +89,39 @@ contract SignalsCoreHarness is SignalsCore {
         int256 upperTick,
         uint256 quantity
     ) external onlyOwner {
-        for (int256 tick = lowerTick; tick < upperTick; tick++) {
-            _exposureLedger[marketId][tick] += quantity;
-        }
+        ISignalsCore.Market memory market = markets[marketId];
+        (uint32 loBin, uint32 hiBin) = TickBinLib.ticksToBins(market, lowerTick, upperTick);
+        
+        ExposureFenwickLib.rangeAdd(
+            _exposureFenwick[marketId],
+            loBin,
+            hiBin,
+            int256(quantity),
+            market.numBins
+        );
     }
 
-    /// @notice Set exposure at a specific tick (Phase 6 testing)
+    /// @notice Set exposure at a specific tick (Fenwick-based, Phase 6 testing)
     function harnessSetExposureAtTick(
         uint256 marketId,
         int256 tick,
         uint256 quantity
     ) external onlyOwner {
-        _exposureLedger[marketId][tick] = quantity;
+        ISignalsCore.Market memory market = markets[marketId];
+        uint32 bin = TickBinLib.tickToBin(market, tick);
+        
+        int256 current = ExposureFenwickLib.rawPrefixSum(_exposureFenwick[marketId], bin);
+        int256 delta = int256(quantity) - current;
+        
+        if (delta != 0) {
+            ExposureFenwickLib.rangeAdd(
+                _exposureFenwick[marketId],
+                bin,
+                bin,
+                delta,
+                market.numBins
+            );
+        }
     }
 
     /// @notice Set payout reserve for a market (Phase 6 testing)
@@ -95,13 +134,15 @@ contract SignalsCoreHarness is SignalsCore {
     }
 
     /**
-     * @notice Get exposure at a specific tick
+     * @notice Get exposure at a specific tick (Fenwick-based)
      * @param marketId Market identifier
-     * @param tick Settlement tick
+     * @param tick Settlement tick (must be aligned to tickSpacing)
      * @return exposure Total exposure at this tick
      */
     function harnessGetExposure(uint256 marketId, int256 tick) external view returns (uint256 exposure) {
-        return _exposureLedger[marketId][tick];
+        ISignalsCore.Market memory market = markets[marketId];
+        uint32 bin = TickBinLib.tickToBin(market, tick);
+        return ExposureFenwickLib.pointQuery(_exposureFenwick[marketId], bin);
     }
 
     /**
