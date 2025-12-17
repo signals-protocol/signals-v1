@@ -61,3 +61,4 @@ contract LazyMulSegmentTreeTest {
 }
 
 
+

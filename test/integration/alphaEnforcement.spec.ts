@@ -6,6 +6,7 @@ import {
   MockPaymentToken,
   MockSignalsPosition,
   MarketLifecycleModule,
+  RiskModule,
 } from "../../typechain-types";
 
 /**
@@ -26,6 +27,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
   let payment: MockPaymentToken;
   let position: MockSignalsPosition;
   let lifecycle: MarketLifecycleModule;
+  let risk: RiskModule;
   let owner: Awaited<ReturnType<typeof ethers.getSigners>>[0];
   let trader: Awaited<ReturnType<typeof ethers.getSigners>>[0];
 
@@ -75,6 +77,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
       })
     ).deploy();
     lifecycle = lifecycleImpl as MarketLifecycleModule;
+    risk = riskModule as RiskModule;
 
     const tradeImpl = await (
       await ethers.getContractFactory("TradeModule", {
@@ -181,7 +184,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
           ethers.parseEther("1000"), // Too high α
           ethers.ZeroAddress
         )
-      ).to.be.revertedWithCustomError(lifecycle, "AlphaExceedsLimit");
+      ).to.be.revertedWithCustomError(risk, "AlphaExceedsLimit");
     });
   });
 
@@ -327,7 +330,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
           ethers.parseEther("500"), // Same α, but now exceeds limit
           ethers.ZeroAddress
         )
-      ).to.be.revertedWithCustomError(lifecycle, "AlphaExceedsLimit");
+      ).to.be.revertedWithCustomError(risk, "AlphaExceedsLimit");
     });
 
     it("allows lower α when drawdown reduces αlimit", async () => {
@@ -391,7 +394,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
           ethers.parseEther("1"), // Tiny α
           ethers.ZeroAddress
         )
-      ).to.be.revertedWithCustomError(lifecycle, "AlphaExceedsLimit");
+      ).to.be.revertedWithCustomError(risk, "AlphaExceedsLimit");
     });
   });
 
@@ -500,7 +503,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
           ethers.ZeroAddress,
           factors
         )
-      ).to.be.revertedWithCustomError(lifecycle, "PriorNotAdmissible");
+      ).to.be.revertedWithCustomError(risk, "PriorNotAdmissible");
     });
 
     it("boundary: ΔEₜ exactly equals backstopNav (should pass)", async () => {
@@ -986,7 +989,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
 
       // Reopen should revert due to α > αlimit
       await expect(core.reopenMarket(1n)).to.be.revertedWithCustomError(
-        lifecycle,
+        risk,
         "AlphaExceedsLimit"
       );
     });
@@ -1031,7 +1034,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
 
       // Reopen should revert due to ΔEₜ > backstopNav
       await expect(core.reopenMarket(1n)).to.be.revertedWithCustomError(
-        lifecycle,
+        risk,
         "PriorNotAdmissible"
       );
     });

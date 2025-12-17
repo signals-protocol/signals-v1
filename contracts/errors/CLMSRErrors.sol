@@ -57,9 +57,9 @@ interface CLMSRErrors {
     /* Free balance / Escrow safety (Phase 6) */
     error InsufficientFreeBalance(uint256 requested, uint256 available);
     
-    /* Risk / α Safety (Phase 7) */
-    error AlphaExceedsLimit(uint256 marketAlpha, uint256 alphaLimit);
-    error PriorNotAdmissible(uint256 deltaEt, uint256 effectiveBackstop);
+    /* Risk / α Safety (Phase 8: Moved to RiskModule as Risk_* errors) */
+    // NOTE: AlphaExceedsLimit → RiskModule.Risk_AlphaExceedsLimit
+    //       PriorNotAdmissible → RiskModule.Risk_PriorNotAdmissible
     error InvalidLambda(uint256 lambda);
     error BatchDeltaEtExceedsBackstop(uint256 batchDeltaEt, uint256 backstopNav);
 
@@ -144,9 +144,9 @@ library CE {
     /* Free balance / Escrow safety (Phase 6) */
     error InsufficientFreeBalance(uint256 requested, uint256 available);
     
-    /* Risk / α Safety (Phase 7) */
-    error AlphaExceedsLimit(uint256 marketAlpha, uint256 alphaLimit);
-    error PriorNotAdmissible(uint256 deltaEt, uint256 effectiveBackstop);
+    /* Risk / α Safety (Phase 8: Moved to RiskModule as Risk_* errors) */
+    // NOTE: AlphaExceedsLimit → RiskModule.Risk_AlphaExceedsLimit
+    //       PriorNotAdmissible → RiskModule.Risk_PriorNotAdmissible
     error InvalidLambda(uint256 lambda);
     error BatchDeltaEtExceedsBackstop(uint256 batchDeltaEt, uint256 backstopNav);
 

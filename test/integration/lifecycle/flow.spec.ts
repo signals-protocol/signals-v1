@@ -30,19 +30,31 @@ function buildDigest(
 describe("Lifecycle + Trade integration", () => {
   async function setup() {
     const [owner, user, oracleSigner] = await ethers.getSigners();
-    const payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
-    const positionImplFactory = await ethers.getContractFactory("SignalsPosition");
+    const payment = await (
+      await ethers.getContractFactory("MockPaymentToken")
+    ).deploy();
+    const positionImplFactory = await ethers.getContractFactory(
+      "SignalsPosition"
+    );
     const positionImpl = await positionImplFactory.deploy();
     await positionImpl.waitForDeployment();
-    const positionInit = positionImplFactory.interface.encodeFunctionData("initialize", [owner.address]);
+    const positionInit = positionImplFactory.interface.encodeFunctionData(
+      "initialize",
+      [owner.address]
+    );
     const positionProxy = (await (
       await ethers.getContractFactory("TestERC1967Proxy")
-    ).deploy(await positionImpl.getAddress(), positionInit)) as TestERC1967Proxy;
+    ).deploy(
+      await positionImpl.getAddress(),
+      positionInit
+    )) as TestERC1967Proxy;
     const position = (await ethers.getContractAt(
       "SignalsPosition",
       await positionProxy.getAddress()
     )) as SignalsPosition;
-    const lazyLib = await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy();
+    const lazyLib = await (
+      await ethers.getContractFactory("LazyMulSegmentTree")
+    ).deploy();
 
     const tradeModule = (await (
       await ethers.getContractFactory("TradeModule", {
@@ -54,9 +66,18 @@ describe("Lifecycle + Trade integration", () => {
         libraries: { LazyMulSegmentTree: lazyLib.target },
       })
     ).deploy()) as MarketLifecycleModule;
-    const oracleModule = (await (await ethers.getContractFactory("OracleModule")).deploy()) as OracleModule;
+    const oracleModule = (await (
+      await ethers.getContractFactory("OracleModule")
+    ).deploy()) as OracleModule;
+    const riskModule = await (
+      await ethers.getContractFactory("RiskModule")
+    ).deploy();
 
-    const coreImpl = (await (await ethers.getContractFactory("SignalsCoreHarness", { libraries: { LazyMulSegmentTree: lazyLib.target } })).deploy()) as SignalsCoreHarness;
+    const coreImpl = (await (
+      await ethers.getContractFactory("SignalsCoreHarness", {
+        libraries: { LazyMulSegmentTree: lazyLib.target },
+      })
+    ).deploy()) as SignalsCoreHarness;
     const submitWindow = 300;
     const finalizeDeadline = 60;
     const initData = coreImpl.interface.encodeFunctionData("initialize", [
@@ -68,8 +89,17 @@ describe("Lifecycle + Trade integration", () => {
     const proxy = (await (
       await ethers.getContractFactory("TestERC1967Proxy")
     ).deploy(coreImpl.target, initData)) as TestERC1967Proxy;
-    const core = (await ethers.getContractAt("SignalsCoreHarness", await proxy.getAddress())) as SignalsCoreHarness;
-    await core.setModules(tradeModule.target, lifecycleModule.target, ethers.ZeroAddress, ethers.ZeroAddress, oracleModule.target);
+    const core = (await ethers.getContractAt(
+      "SignalsCoreHarness",
+      await proxy.getAddress()
+    )) as SignalsCoreHarness;
+    await core.setModules(
+      tradeModule.target,
+      lifecycleModule.target,
+      riskModule.target,
+      ethers.ZeroAddress,
+      oracleModule.target
+    );
     await core.setOracleConfig(oracleSigner.address);
     await position.connect(owner).setCore(await core.getAddress());
 
@@ -121,12 +151,24 @@ describe("Lifecycle + Trade integration", () => {
       ethers.ZeroAddress
     );
     await expect(
-      core.createMarketUniform(0, 4, 1, Number(start), Number(end), Number(settlementTs), 4, ethers.parseEther("1"), ethers.ZeroAddress)
+      core.createMarketUniform(
+        0,
+        4,
+        1,
+        Number(start),
+        Number(end),
+        Number(settlementTs),
+        4,
+        ethers.parseEther("1"),
+        ethers.ZeroAddress
+      )
     ).to.emit(lifecycleEvents, "MarketCreated");
 
     // fund and approve user
     await payment.transfer(user.address, 10_000_000n);
-    await payment.connect(user).approve(await core.getAddress(), ethers.MaxUint256);
+    await payment
+      .connect(user)
+      .approve(await core.getAddress(), ethers.MaxUint256);
 
     // open position
     const positionId = await position.nextId();
@@ -137,7 +179,13 @@ describe("Lifecycle + Trade integration", () => {
     // submit oracle price after settlementTimestamp (Tset)
     const priceTimestamp = settlementTs + 5n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
-    const digest = buildDigest(chainId, await core.getAddress(), marketId, 2n, priceTimestamp);
+    const digest = buildDigest(
+      chainId,
+      await core.getAddress(),
+      marketId,
+      2n,
+      priceTimestamp
+    );
     const signature = await oracleSigner.signMessage(ethers.getBytes(digest));
     await core.submitSettlementPrice(marketId, 2n, priceTimestamp, signature);
 
@@ -181,10 +229,22 @@ describe("Lifecycle + Trade integration", () => {
     const start = now - 50n;
     const end = now + 200n;
     const settlementTs = end + 10n;
-    await core.createMarketUniform(0, 4, 1, Number(start), Number(end), Number(settlementTs), 4, ethers.parseEther("1"), ethers.ZeroAddress);
+    await core.createMarketUniform(
+      0,
+      4,
+      1,
+      Number(start),
+      Number(end),
+      Number(settlementTs),
+      4,
+      ethers.parseEther("1"),
+      ethers.ZeroAddress
+    );
 
     await payment.transfer(user.address, 10_000_000n);
-    await payment.connect(user).approve(await core.getAddress(), ethers.MaxUint256);
+    await payment
+      .connect(user)
+      .approve(await core.getAddress(), ethers.MaxUint256);
 
     const pos1 = await position.nextId(); // winner
     await core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000);
@@ -194,7 +254,13 @@ describe("Lifecycle + Trade integration", () => {
     // priceTimestamp must be >= Tset (settlementTs)
     const priceTimestamp = settlementTs + 5n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
-    const digest = buildDigest(chainId, await core.getAddress(), 1, 1n, priceTimestamp);
+    const digest = buildDigest(
+      chainId,
+      await core.getAddress(),
+      1,
+      1n,
+      priceTimestamp
+    );
     const signature = await oracleSigner.signMessage(ethers.getBytes(digest));
     await core.submitSettlementPrice(1, 1n, priceTimestamp, signature);
     await time.setNextBlockTimestamp(Number(priceTimestamp + 2n));
@@ -222,20 +288,34 @@ describe("Lifecycle + Trade integration", () => {
     const start = now + 100n;
     const end = start + 100n;
     const settlementTs = end + 50n;
-    await core.createMarketUniform(0, 4, 1, Number(start), Number(end), Number(settlementTs), 4, ethers.parseEther("1"), ethers.ZeroAddress);
+    await core.createMarketUniform(
+      0,
+      4,
+      1,
+      Number(start),
+      Number(end),
+      Number(settlementTs),
+      4,
+      ethers.parseEther("1"),
+      ethers.ZeroAddress
+    );
 
     await payment.transfer(user.address, 10_000_000n);
-    await payment.connect(user).approve(await core.getAddress(), ethers.MaxUint256);
+    await payment
+      .connect(user)
+      .approve(await core.getAddress(), ethers.MaxUint256);
 
     // too early to trade
-    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to.be.reverted;
+    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to
+      .be.reverted;
 
     await time.setNextBlockTimestamp(Number(start + 1n));
     await core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000);
 
     // after endTimestamp trading should revert
     await time.setNextBlockTimestamp(Number(end + 1n));
-    await expect(core.connect(user).increasePosition(1, 1_000, 5_000_000)).to.be.reverted;
+    await expect(core.connect(user).increasePosition(1, 1_000, 5_000_000)).to.be
+      .reverted;
 
     // settlement too early
     await expect(core.settleMarket(1)).to.be.reverted;
@@ -243,7 +323,13 @@ describe("Lifecycle + Trade integration", () => {
     // submit settlement and settle within window (priceTimestamp >= Tset)
     const priceTimestamp = settlementTs + 10n;
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
-    const digest = buildDigest(chainId, await core.getAddress(), 1, 1n, priceTimestamp);
+    const digest = buildDigest(
+      chainId,
+      await core.getAddress(),
+      1,
+      1n,
+      priceTimestamp
+    );
     const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
     await core.submitSettlementPrice(1, 1n, priceTimestamp, sig);
     await core.settleMarket(1);

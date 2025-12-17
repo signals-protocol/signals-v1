@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "../core/SignalsCore.sol";
 import "../lib/LazyMulSegmentTree.sol";
+import "../interfaces/IRiskModule.sol";
 
 /// @notice Harness extending SignalsCore with helpers to seed markets/trees for tests.
 contract SignalsCoreHarness is SignalsCore {
@@ -164,6 +165,12 @@ contract SignalsCoreHarness is SignalsCore {
         for (uint256 i = 0; i < numBins; i++) {
             factors[i] = 1e18;
         }
+        
+        // Phase 8: Risk gate FIRST - RiskModule calculates deltaEt from factors
+        _riskGate(abi.encodeCall(
+            IRiskModule.gateCreateMarket,
+            (liquidityParameter, numBins, factors)
+        ));
         
         bytes memory ret = _delegate(lifecycleModule, abi.encodeWithSignature(
             "createMarket(int256,int256,int256,uint64,uint64,uint64,uint32,uint256,address,uint256[])",

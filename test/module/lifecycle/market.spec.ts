@@ -78,6 +78,9 @@ describe("MarketLifecycleModule", () => {
     const oracleModule = (await (
       await ethers.getContractFactory("OracleModule")
     ).deploy()) as OracleModule;
+    const riskModule = await (
+      await ethers.getContractFactory("RiskModule")
+    ).deploy();
 
     const coreImpl = (await (
       await ethers.getContractFactory("SignalsCoreHarness", {
@@ -102,7 +105,7 @@ describe("MarketLifecycleModule", () => {
     await core.setModules(
       ethers.ZeroAddress,
       lifecycleImpl.target,
-      ethers.ZeroAddress,
+      riskModule.target,
       ethers.ZeroAddress,
       oracleModule.target
     );

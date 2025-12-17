@@ -48,15 +48,22 @@ describe("VaultWithMarkets E2E", () => {
       await ethers.getContractFactory("MockSignalsPosition")
     ).deploy()) as MockSignalsPosition;
 
-    const lazy = (await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy()) as LazyMulSegmentTree;
+    const lazy = (await (
+      await ethers.getContractFactory("LazyMulSegmentTree")
+    ).deploy()) as LazyMulSegmentTree;
     const lifecycle = (await (
       await ethers.getContractFactory("MarketLifecycleModule", {
         libraries: { LazyMulSegmentTree: lazy.target },
       })
     ).deploy()) as MarketLifecycleModule;
 
-    const oracle = (await (await ethers.getContractFactory("OracleModule")).deploy()) as OracleModule;
-    const vault = (await (await ethers.getContractFactory("LPVaultModule")).deploy()) as LPVaultModule;
+    const oracle = (await (
+      await ethers.getContractFactory("OracleModule")
+    ).deploy()) as OracleModule;
+    const vault = (await (
+      await ethers.getContractFactory("LPVaultModule")
+    ).deploy()) as LPVaultModule;
+    const risk = await (await ethers.getContractFactory("RiskModule")).deploy();
 
     const coreImpl = (await (
       await ethers.getContractFactory("SignalsCoreHarness", {
@@ -85,7 +92,7 @@ describe("VaultWithMarkets E2E", () => {
     await core.setModules(
       ethers.ZeroAddress,
       lifecycle.target,
-      ethers.ZeroAddress,
+      risk.target,
       vault.target,
       oracle.target
     );
@@ -113,9 +120,8 @@ describe("VaultWithMarkets E2E", () => {
   }
 
   it("settleMarket records daily PnL and vault consumes it in processDailyBatch", async () => {
-    const { owner, seeder, oracleSigner, chainId, core, payment } = await loadFixture(
-      deploySystem
-    );
+    const { owner, seeder, oracleSigner, chainId, core, payment } =
+      await loadFixture(deploySystem);
 
     // Fix timestamp so batchId (day-key) is deterministic and monotonic
     const latest = BigInt(await time.latest());
@@ -126,7 +132,9 @@ describe("VaultWithMarkets E2E", () => {
     // Seed vault (sets currentBatchId = dayKey - 1)
     const seedAmount = ethers.parseEther("1000");
     await payment.mint(seeder.address, seedAmount);
-    await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+    await payment
+      .connect(seeder)
+      .approve(await core.getAddress(), ethers.MaxUint256);
 
     await time.setNextBlockTimestamp(Number(seedTime));
     await core.connect(seeder).seedVault(seedAmount);
@@ -151,7 +159,17 @@ describe("VaultWithMarkets E2E", () => {
       WAD,
       ethers.ZeroAddress
     );
-    await core.createMarketUniform(0, 4, 1, Number(start), Number(end), Number(tSet), 4, WAD, ethers.ZeroAddress);
+    await core.createMarketUniform(
+      0,
+      4,
+      1,
+      Number(start),
+      Number(end),
+      Number(tSet),
+      4,
+      WAD,
+      ethers.ZeroAddress
+    );
 
     // Manipulate tree state to create non-zero P&L at settlement
     // Z_start = 4e18, Z_end = 5e18 → L_t > 0
@@ -167,7 +185,13 @@ describe("VaultWithMarkets E2E", () => {
 
     // Submit oracle price candidate within window [Tset, Tset + submitWindow]
     const priceTimestamp = tSet + 1n;
-    const digest = buildOracleDigest(chainId, await core.getAddress(), marketId, 1n, priceTimestamp);
+    const digest = buildOracleDigest(
+      chainId,
+      await core.getAddress(),
+      marketId,
+      1n,
+      priceTimestamp
+    );
     const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
 
     await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
@@ -177,7 +201,8 @@ describe("VaultWithMarkets E2E", () => {
     await time.setNextBlockTimestamp(Number(priceTimestamp + 2n));
     await core.connect(owner).settleMarket(marketId);
 
-    const [ltBefore, ftotBefore, , , , , processedBefore] = await core.getDailyPnl.staticCall(batchId);
+    const [ltBefore, ftotBefore, , , , , processedBefore] =
+      await core.getDailyPnl.staticCall(batchId);
     expect(processedBefore).to.equal(false);
     expect(ftotBefore).to.equal(0n);
     expect(ltBefore).to.not.equal(0n);
@@ -188,7 +213,9 @@ describe("VaultWithMarkets E2E", () => {
 
     expect(navAfter).to.not.equal(navBefore);
 
-    const [, , , , , , processedAfter] = await core.getDailyPnl.staticCall(batchId);
+    const [, , , , , , processedAfter] = await core.getDailyPnl.staticCall(
+      batchId
+    );
     expect(processedAfter).to.equal(true);
     expect(await core.currentBatchId()).to.equal(batchId);
   });
@@ -199,7 +226,8 @@ describe("VaultWithMarkets E2E", () => {
   // ==================================================================
   describe("ΔEₜ Grant Cap Wiring", () => {
     it("batch succeeds when grantNeed ≤ ΔEₜ (uniform prior, no grant needed)", async () => {
-      const { seeder, oracleSigner, chainId, core, payment } = await loadFixture(deploySystem);
+      const { seeder, oracleSigner, chainId, core, payment } =
+        await loadFixture(deploySystem);
 
       const latest = BigInt(await time.latest());
       const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
@@ -207,14 +235,18 @@ describe("VaultWithMarkets E2E", () => {
       // Seed vault (use parseEther for consistency with minSeedAmount comparison)
       const seedAmount = ethers.parseEther("1000");
       await payment.mint(seeder.address, seedAmount);
-      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+      await payment
+        .connect(seeder)
+        .approve(await core.getAddress(), ethers.MaxUint256);
       await time.setNextBlockTimestamp(Number(seedTime));
       await core.connect(seeder).seedVault(seedAmount);
 
       // Create market with uniform prior → ΔEₜ = 0
       const tSet = seedTime + 500n;
       await core.createMarketUniform(
-        0, 100, 10,
+        0,
+        100,
+        10,
         Number(seedTime + 100n),
         Number(tSet - 100n),
         Number(tSet),
@@ -225,7 +257,13 @@ describe("VaultWithMarkets E2E", () => {
 
       // Submit oracle and settle
       const priceTimestamp = tSet + 1n;
-      const digest = buildOracleDigest(chainId, await core.getAddress(), 1n, 50n, priceTimestamp);
+      const digest = buildOracleDigest(
+        chainId,
+        await core.getAddress(),
+        1n,
+        50n,
+        priceTimestamp
+      );
       const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
 
       await time.setNextBlockTimestamp(Number(priceTimestamp));
@@ -237,19 +275,24 @@ describe("VaultWithMarkets E2E", () => {
       const batchId = tSet / BATCH_SECONDS;
       await expect(core.processDailyBatch(batchId)).to.not.be.reverted;
 
-      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(
+        batchId
+      );
       expect(processed).to.equal(true);
     });
 
     it("market ΔEₜ is stored and propagated to batch snapshot", async () => {
-      const { seeder, oracleSigner, chainId, core, payment } = await loadFixture(deploySystem);
+      const { seeder, oracleSigner, chainId, core, payment } =
+        await loadFixture(deploySystem);
 
       const latest = BigInt(await time.latest());
       const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
 
       const seedAmount = ethers.parseEther("1000");
       await payment.mint(seeder.address, seedAmount);
-      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+      await payment
+        .connect(seeder)
+        .approve(await core.getAddress(), ethers.MaxUint256);
       await time.setNextBlockTimestamp(Number(seedTime));
       await core.connect(seeder).seedVault(seedAmount);
 
@@ -262,7 +305,9 @@ describe("VaultWithMarkets E2E", () => {
       concentratedFactors[0] = 2n * WAD; // 2x weight on first bin
 
       await core.createMarket(
-        0, 100, 10,
+        0,
+        100,
+        10,
         Number(seedTime + 100n),
         Number(tSet - 100n),
         Number(tSet),
@@ -280,7 +325,13 @@ describe("VaultWithMarkets E2E", () => {
 
       // Submit oracle and settle
       const priceTimestamp = tSet + 1n;
-      const digest = buildOracleDigest(chainId, await core.getAddress(), 1n, 50n, priceTimestamp);
+      const digest = buildOracleDigest(
+        chainId,
+        await core.getAddress(),
+        1n,
+        50n,
+        priceTimestamp
+      );
       const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
 
       await time.setNextBlockTimestamp(Number(priceTimestamp));
@@ -293,7 +344,9 @@ describe("VaultWithMarkets E2E", () => {
       await core.processDailyBatch(batchId);
 
       // Verify batch processed successfully
-      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(
+        batchId
+      );
       expect(processed).to.equal(true);
 
       // Note: getDailyPnl doesn't expose DeltaEtSum, but we verified:
@@ -307,7 +360,7 @@ describe("VaultWithMarkets E2E", () => {
       // In a real scenario, this would require:
       // 1. Concentrated prior with small ΔEₜ
       // 2. Large loss that requires grant > ΔEₜ
-      // 
+      //
       // Since directly simulating large losses is complex in E2E,
       // this test verifies the unit-level behavior is wired correctly.
       // Full integration is covered by FeeWaterfallLib unit tests.
@@ -319,7 +372,9 @@ describe("VaultWithMarkets E2E", () => {
 
       const seedAmount = ethers.parseEther("1000");
       await payment.mint(seeder.address, seedAmount);
-      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+      await payment
+        .connect(seeder)
+        .approve(await core.getAddress(), ethers.MaxUint256);
       await time.setNextBlockTimestamp(Number(seedTime));
       await core.connect(seeder).seedVault(seedAmount);
 
@@ -335,4 +390,3 @@ describe("VaultWithMarkets E2E", () => {
     });
   });
 });
-

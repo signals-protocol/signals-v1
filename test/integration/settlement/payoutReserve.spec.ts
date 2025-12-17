@@ -91,6 +91,8 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await ethers.getContractFactory("LPVaultModule")
     ).deploy()) as LPVaultModule;
 
+    const risk = await (await ethers.getContractFactory("RiskModule")).deploy();
+
     const coreImpl = (await (
       await ethers.getContractFactory("SignalsCoreHarness", {
         libraries: { LazyMulSegmentTree: lazy.target },
@@ -118,7 +120,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
     await core.setModules(
       trade.target,
       lifecycle.target,
-      ethers.ZeroAddress,
+      risk.target,
       vault.target,
       oracle.target
     );
@@ -442,15 +444,8 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
     });
 
     it("multiple claims do not change NAV", async () => {
-      const {
-        core,
-        seeder,
-        trader,
-        owner,
-        oracleSigner,
-        chainId,
-        position,
-      } = await loadFixture(deployFullSystem);
+      const { core, seeder, trader, owner, oracleSigner, chainId, position } =
+        await loadFixture(deployFullSystem);
 
       const { marketId, tSet, batchId } = await setupMarketWithPosition(
         core,
@@ -705,7 +700,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
 
       await payment.mint(seeder.address, usdc("100000"));
-      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+      await payment
+        .connect(seeder)
+        .approve(await core.getAddress(), ethers.MaxUint256);
 
       await time.setNextBlockTimestamp(Number(seedTime));
       await core.connect(seeder).seedVault(usdc("10000"));
@@ -713,7 +710,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       // Create market
       const tSet = seedTime + 500n;
       await core.createMarketUniform(
-        0, 100, 10,
+        0,
+        100,
+        10,
         Number(seedTime + 100n),
         Number(tSet - 100n),
         Number(tSet),
@@ -746,7 +745,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
       // Verify PnL was recorded to batch
       const batchId = tSet / BATCH_SECONDS;
-      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(
+        batchId
+      );
       // processed should still be false (batch not yet run)
       expect(processed).to.equal(false);
     });
@@ -757,7 +758,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
 
       await payment.mint(seeder.address, usdc("100000"));
-      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+      await payment
+        .connect(seeder)
+        .approve(await core.getAddress(), ethers.MaxUint256);
 
       await time.setNextBlockTimestamp(Number(seedTime));
       await core.connect(seeder).seedVault(usdc("10000"));
@@ -765,7 +768,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       // Create and settle market (normal path)
       const tSet = seedTime + 500n;
       await core.createMarketUniform(
-        0, 100, 10,
+        0,
+        100,
+        10,
         Number(seedTime + 100n),
         Number(tSet - 100n),
         Number(tSet),
@@ -776,7 +781,13 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
       // Submit oracle price
       const priceTimestamp = tSet + 1n;
-      const digest = buildOracleDigest(chainId, await core.getAddress(), 1n, 50n, priceTimestamp);
+      const digest = buildOracleDigest(
+        chainId,
+        await core.getAddress(),
+        1n,
+        50n,
+        priceTimestamp
+      );
       const sig = await oracleSigner.signMessage(ethers.getBytes(digest));
 
       await time.setNextBlockTimestamp(Number(priceTimestamp));
@@ -791,7 +802,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await expect(core.processDailyBatch(batchId)).to.not.be.reverted;
 
       // Verify batch is processed
-      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(
+        batchId
+      );
       expect(processed).to.equal(true);
 
       // Claims are still gated by time (independent of batch)
@@ -806,7 +819,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       const seedTime = (latest / BATCH_SECONDS + 1n) * BATCH_SECONDS + 1_000n;
 
       await payment.mint(seeder.address, usdc("100000"));
-      await payment.connect(seeder).approve(await core.getAddress(), ethers.MaxUint256);
+      await payment
+        .connect(seeder)
+        .approve(await core.getAddress(), ethers.MaxUint256);
 
       await time.setNextBlockTimestamp(Number(seedTime));
       await core.connect(seeder).seedVault(usdc("10000"));
@@ -814,7 +829,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       // Create market
       const tSet = seedTime + 500n;
       await core.createMarketUniform(
-        0, 100, 10,
+        0,
+        100,
+        10,
         Number(seedTime + 100n),
         Number(tSet - 100n),
         Number(tSet),
@@ -834,7 +851,9 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await core.processDailyBatch(batchId);
 
       const navAfter = await core.getVaultNav.staticCall();
-      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(
+        batchId
+      );
 
       // Batch should be processed successfully
       expect(processed).to.equal(true);

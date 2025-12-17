@@ -85,11 +85,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         if (expectedBins != numBins) revert CE.InvalidMarketParameters(minTick, maxTick, tickSpacing);
         if (liquidityParameter == 0) revert CE.InvalidLiquidityParameter();
         if (baseFactors.length != numBins) revert CE.InvalidMarketParameters(minTick, maxTick, tickSpacing);
-        
-        // Phase 7: α Safety enforcement (WP v2 Sec 4.5)
-        _validateAlphaForMarket(liquidityParameter, numBins);
 
-        // Calculate minFactor and rootSum from baseFactors for ΔEₜ calculation
         uint256 minFactor = type(uint256).max;
         uint256 rootSum = 0;
         for (uint256 i = 0; i < numBins; i++) {
@@ -98,11 +94,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
             rootSum += baseFactors[i];
         }
 
-        // Phase 7: Prior admissibility check (WP v2 Sec 4.1)
-        // ΔEₜ := α * ln(rootSum / (n * minFactor))
-        // Admissibility: ΔEₜ ≤ B_eff_{t-1} ≤ backstopNav
         uint256 deltaEt = _calculateDeltaEt(liquidityParameter, numBins, rootSum, minFactor);
-        _validatePriorAdmissibility(deltaEt);
 
         // Phase 7: One market per batch invariant (WP v2)
         // Each batch processes exactly one market to simplify ΔEₜ admissibility
@@ -296,13 +288,6 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         if (!_marketExists(marketId)) revert CE.MarketNotFound(marketId);
         // Can reopen either settled or failed markets
         if (!market.settled && !market.failed) revert CE.MarketNotSettled(marketId);
-
-        // Phase 7: Re-validate α safety (drawdown may have increased since creation)
-        // Per WP v2: αlimit decreases with drawdown, so reopen must re-check
-        _validateAlphaForMarket(market.liquidityParameter, market.numBins);
-        
-        // Phase 7: Re-validate prior admissibility (backstopNav may have changed)
-        _validatePriorAdmissibility(market.deltaEt);
 
         market.settled = false;
         market.failed = false;
@@ -578,43 +563,9 @@ contract MarketLifecycleModule is SignalsCoreStorage {
     // Phase 7: α Safety Enforcement
     // ============================================================
 
-    /**
-     * @notice Validate α against safety limit for market creation
-     * @dev Per WP v2 Sec 4.5: α ≤ αlimit where αlimit depends on NAV and drawdown
-     *      
-     *      SAFETY: Uses lnWadUp for conservative α_base calculation.
-     *      Over-estimating ln(n) → under-estimating α_base → safer bounds.
-     *
-     * @param liquidityParameter Market α to validate
-     * @param numBins Number of outcome bins for the market
-     */
-    function _validateAlphaForMarket(uint256 liquidityParameter, uint32 numBins) internal view {
-        if (!riskConfig.enforceAlpha) return; // Skip if not enforced
-        if (lpVault.nav == 0) return; // Skip if vault not seeded
-        
-        // Calculate αbase = λ * E_t / ln(n) with safe (upward-rounded) ln
-        uint256 lnN = FixedPointMathU.lnWadUp(numBins);
-        if (lnN == 0) return; // Edge case: n <= 1
-        
-        uint256 alphaBase = riskConfig.lambda.wMul(lpVault.nav).wDiv(lnN);
-        
-        // Calculate drawdown: DD = 1 - P / P^peak
-        uint256 drawdown = 0;
-        if (lpVault.pricePeak > 0 && lpVault.price < lpVault.pricePeak) {
-            drawdown = WAD - lpVault.price.wDiv(lpVault.pricePeak);
-        }
-        
-        // Calculate αlimit = max{0, αbase * (1 - k * DD)}
-        uint256 kDD = riskConfig.kDrawdown.wMul(drawdown);
-        uint256 alphaLimit = kDD >= WAD ? 0 : alphaBase.wMul(WAD - kDD);
-        
-        if (liquidityParameter > alphaLimit) {
-            revert CE.AlphaExceedsLimit(liquidityParameter, alphaLimit);
-        }
-    }
-
     // ============================================================
-    // Phase 7: ΔEₜ Calculation and Prior Admissibility
+    // Phase 7: ΔEₜ Calculation
+    // NOTE: Phase 8 moved α/prior enforcement to RiskModule gate
     // ============================================================
 
     /**
@@ -669,18 +620,4 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         deltaEt = alpha.wMulUp(lnRatio);
     }
 
-    /**
-     * @notice Validate prior admissibility
-     * @dev Per WP v2: ΔEₜ ≤ B_eff_{t-1} ≤ backstopNav
-     *      If violated, revert with PriorNotAdmissible
-     * @param deltaEt Calculated tail budget (WAD)
-     */
-    function _validatePriorAdmissibility(uint256 deltaEt) internal view {
-        // B_eff = backstopNav (simplified; full version would account for pending grants)
-        uint256 effectiveBackstop = capitalStack.backstopNav;
-        
-        if (deltaEt > effectiveBackstop) {
-            revert CE.PriorNotAdmissible(deltaEt, effectiveBackstop);
-        }
-    }
 }
