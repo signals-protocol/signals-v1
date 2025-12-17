@@ -197,7 +197,7 @@ describe("TradeModule flow (minimal parity)", () => {
       minTick: m.minTick,
       maxTick: m.maxTick,
       tickSpacing: m.tickSpacing,
-      settlementTick: 2n, // Winning tick within position range [0,4)
+      settlementTick: 10n, // Outside position range [0,4) so payout is 0
       settlementValue: m.settlementValue,
       liquidityParameter: m.liquidityParameter,
       feePolicy: m.feePolicy,
@@ -209,13 +209,13 @@ describe("TradeModule flow (minimal parity)", () => {
     await core.setMarket(1, settledMarket);
 
     // Note: This test uses TradeModuleProxy which doesn't have harness functions
-    // Payout may be 0 since exposure ledger and payout reserve are not set
+    // settlementTick is set outside position range [0,4) so payout is 0
     // The key assertion is that claimPayout succeeds and burns the position
     const balBefore = await payment.balanceOf(user.address);
     await core.connect(user).claimPayout(1);
     const balAfter = await payment.balanceOf(user.address);
-    // Balance may stay the same if payout is 0 (no exposure set)
-    expect(balAfter).to.be.gte(balBefore);
+    // Balance stays the same since payout is 0 (losing position)
+    expect(balAfter).to.equal(balBefore);
     expect(await position.exists(1)).to.equal(false);
   });
 
@@ -277,7 +277,7 @@ describe("TradeModule flow (minimal parity)", () => {
       minTick: m2.minTick,
       maxTick: m2.maxTick,
       tickSpacing: m2.tickSpacing,
-      settlementTick: m2.settlementTick,
+      settlementTick: 10n, // Outside position range [0,4) so payout is 0
       settlementValue: m2.settlementValue,
       liquidityParameter: m2.liquidityParameter,
       feePolicy: m2.feePolicy,

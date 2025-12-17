@@ -32,8 +32,7 @@ import {
   buildRedstonePayload,
   submitWithPayload,
 } from "../../helpers/redstone";
-
-const BATCH_SECONDS = 86_400n;
+import { advancePastBatchEnd, BATCH_SECONDS } from "../../helpers/constants";
 const WAD = ethers.parseEther("1");
 
 // Redstone feed config (for setRedstoneConfig)
@@ -389,9 +388,8 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await time.setNextBlockTimestamp(Number(opsEnd + 1n));
       await core.finalizePrimarySettlement(marketId);
 
-      // Advance time past claim window (settlementFinalizeDeadline = 60s)
-      const claimOpenTime = opsEnd + 1n + 61n;
-      await time.setNextBlockTimestamp(Number(claimOpenTime));
+      // Advance time past batch end and claim window (settlementFinalizeDeadline = 60s)
+      await advancePastBatchEnd(batchId);
       await core.processDailyBatch(batchId);
 
       // Record NAV before claim
@@ -399,7 +397,6 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       const priceBefore = await core.getVaultPrice.staticCall();
 
       // Claim payout (now past claim window)
-      await time.setNextBlockTimestamp(Number(claimOpenTime + 1n));
       await core.connect(trader).claimPayout(positionId);
 
       // NAV and Price MUST be unchanged
@@ -446,15 +443,13 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await time.setNextBlockTimestamp(Number(opsEnd + 1n));
       await core.finalizePrimarySettlement(marketId);
 
-      // Advance time past claim window
-      const claimOpenTime = opsEnd + 1n + 61n;
-      await time.setNextBlockTimestamp(Number(claimOpenTime));
+      // Advance time past batch end
+      await advancePastBatchEnd(batchId);
       await core.processDailyBatch(batchId);
 
       const navBefore = await core.getVaultNav.staticCall();
 
       // First claim (past claim window)
-      await time.setNextBlockTimestamp(Number(claimOpenTime + 1n));
       await core.connect(trader).claimPayout(1n);
       const navAfterFirst = await core.getVaultNav.staticCall();
       expect(navAfterFirst).to.equal(
@@ -463,7 +458,6 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       );
 
       // Second claim
-      await time.setNextBlockTimestamp(Number(claimOpenTime + 2n));
       await core.connect(owner).claimPayout(2n);
       const navAfterSecond = await core.getVaultNav.staticCall();
       expect(navAfterSecond).to.equal(
@@ -570,9 +564,8 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await time.setNextBlockTimestamp(Number(opsEnd + 1n));
       await core.finalizePrimarySettlement(marketId);
 
-      // Advance time past claim window
-      const claimOpenTime = opsEnd + 1n + 61n;
-      await time.setNextBlockTimestamp(Number(claimOpenTime));
+      // Advance time past batch end
+      await advancePastBatchEnd(batchId);
       await core.processDailyBatch(batchId);
 
       // Expected total payout = winningQty1 + winningQty2
@@ -583,14 +576,11 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       const balanceBefore = await payment.balanceOf(await core.getAddress());
 
       // Claims past claim window
-      await time.setNextBlockTimestamp(Number(claimOpenTime + 1n));
       await core.connect(trader).claimPayout(1n);
-      await time.setNextBlockTimestamp(Number(claimOpenTime + 2n));
       await core.connect(owner).claimPayout(2n);
 
       // Loser claim should give 0
       const balanceBeforeLoser = await payment.balanceOf(trader.address);
-      await time.setNextBlockTimestamp(Number(claimOpenTime + 3n));
       await core.connect(trader).claimPayout(3n);
       const balanceAfterLoser = await payment.balanceOf(trader.address);
       expect(balanceAfterLoser).to.equal(
@@ -722,6 +712,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
       // Process batch - should succeed regardless of claim timing
       const batchId = tSet / BATCH_SECONDS;
+      await advancePastBatchEnd(batchId);
       await expect(core.processDailyBatch(batchId)).to.not.be.reverted;
 
       // Verify batch is processed
@@ -771,6 +762,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
       // Process batch
       const batchId = tSet / BATCH_SECONDS;
+      await advancePastBatchEnd(batchId);
       await core.processDailyBatch(batchId);
 
       const navAfter = await core.getVaultNav.staticCall();

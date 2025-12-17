@@ -12,9 +12,9 @@
 
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { LPVaultModuleProxy, MockERC20 } from "../../../typechain-types";
-import { WAD } from "../../helpers/constants";
+import { WAD, BATCH_SECONDS } from "../../helpers/constants";
 
 // Phase 6: Helper for 6-decimal token amounts
 function usdc(amount: string | number): bigint {
@@ -82,6 +82,12 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
     // NOTE: deltaEt is now per-market (Market.deltaEt) and summed per-batch (DeltaEtSum)
     // Global config deltaEt field removed - grants use batch DeltaEtSum
     const currentBatchId = await fixture.proxy.getCurrentBatchId();
+    
+    // Advance time past the next batch end to allow processDailyBatch calls
+    const nextBatchEnd = (currentBatchId + 2n) * BATCH_SECONDS;
+    await time.setNextBlockTimestamp(Number(nextBatchEnd) + 1);
+    await ethers.provider.send("evm_mine", []);
+    
     return { ...fixture, currentBatchId };
   }
 

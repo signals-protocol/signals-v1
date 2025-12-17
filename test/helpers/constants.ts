@@ -1,4 +1,5 @@
 import { ethers } from "hardhat";
+import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 // WAD (18 decimals) constants
 export const WAD = ethers.parseEther("1");
@@ -35,9 +36,20 @@ export const LOOSE_TOLERANCE = ethers.parseEther("0.0001"); // 1e-4 WAD
 // Time constants
 export const ONE_DAY = 86400;
 export const ONE_HOUR = 3600;
+export const BATCH_SECONDS = 86400n; // 1 day
 
 // Phase 7: Create uniform prior factors (all 1 WAD)
 // Use this for createMarket calls to get ΔEₜ = 0
 export function uniformFactors(numBins: number): bigint[] {
   return Array(numBins).fill(WAD);
+}
+
+// Helper to advance time past batch end for processDailyBatch
+export async function advancePastBatchEnd(batchId: bigint) {
+  const batchEndTime = Number((batchId + 1n) * BATCH_SECONDS) + 1;
+  const currentTime = await time.latest();
+  // Only advance if batch end time is in the future
+  if (batchEndTime > currentTime) {
+    await time.setNextBlockTimestamp(batchEndTime);
+  }
 }

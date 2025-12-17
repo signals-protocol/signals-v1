@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { LPVaultModuleProxy, MockERC20 } from "../../../typechain-types";
-import { WAD } from "../../helpers/constants";
+import { WAD, advancePastBatchEnd } from "../../helpers/constants";
 
 // Phase 6: Helper for 6-decimal token amounts
 // paymentToken is USDC6 (6 decimals), internal accounting uses WAD (18 decimals)
@@ -278,6 +278,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // Claim first to change status from Pending to Claimed
@@ -356,6 +357,7 @@ describe("LPVaultModule", () => {
       const moduleAtProxy = module.attach(proxy.target);
 
       // Process batch - should emit DailyBatchProcessed event
+      await advancePastBatchEnd(firstBatchId);
       await expect(proxy.processDailyBatch(firstBatchId)).to.emit(
         moduleAtProxy,
         "DailyBatchProcessed"
@@ -377,6 +379,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // N = 1000 + 500 = 1500
@@ -416,6 +419,7 @@ describe("LPVaultModule", () => {
 
       const moduleAtProxy = module.attach(proxy.target);
 
+      await advancePastBatchEnd(firstBatchId);
       await expect(proxy.processDailyBatch(firstBatchId)).to.emit(
         moduleAtProxy,
         "DailyBatchProcessed"
@@ -444,6 +448,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // Net: +500 - 300 = +200
@@ -475,6 +480,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       const moduleAtProxy = module.attach(proxy.target);
@@ -515,6 +521,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // First claim succeeds
@@ -538,6 +545,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       await expect(
@@ -570,6 +578,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       const moduleAtProxy = module.attach(proxy.target);
@@ -598,6 +607,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // Batch 2 not yet processed, claim should fail
@@ -621,6 +631,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // Process second batch
@@ -631,6 +642,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(secondBatchId);
       await proxy.processDailyBatch(secondBatchId);
 
       const moduleAtProxy = module.attach(proxy.target);
@@ -680,6 +692,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // Verify NAV increased by total deposits (NAV is WAD)
@@ -706,6 +719,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       expect(await proxy.getVaultNav()).to.equal(ethers.parseEther("1200"));
@@ -739,6 +753,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(firstBatchId);
       await proxy.processDailyBatch(firstBatchId);
 
       // Deposit claimable (deposit request ID = 0)
@@ -758,6 +773,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(secondBatchId);
       await proxy.processDailyBatch(secondBatchId);
 
       // Still not claimable
@@ -773,6 +789,7 @@ describe("LPVaultModule", () => {
         0n,
         ethers.parseEther("500")
       );
+      await advancePastBatchEnd(thirdBatchId);
       await proxy.processDailyBatch(thirdBatchId);
 
       // NOW claimable

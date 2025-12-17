@@ -18,8 +18,7 @@ import {
   buildRedstonePayload,
   submitWithPayload,
 } from "../../helpers/redstone";
-
-const BATCH_SECONDS = 86_400n;
+import { advancePastBatchEnd, BATCH_SECONDS } from "../../helpers/constants";
 const WAD = ethers.parseEther("1");
 
 // Redstone feed config (for setRedstoneConfig)
@@ -202,6 +201,7 @@ describe("VaultWithMarkets E2E", () => {
     expect(ltBefore).to.not.equal(0n);
 
     const navBefore = await core.getVaultNav.staticCall();
+    await advancePastBatchEnd(batchId);
     await core.processDailyBatch(batchId);
     const navAfter = await core.getVaultNav.staticCall();
 
@@ -259,6 +259,7 @@ describe("VaultWithMarkets E2E", () => {
 
       // Process batch - should succeed (uniform prior has ΔEₜ = 0, and no grant needed with no loss)
       const batchId = tSet / BATCH_SECONDS;
+      await advancePastBatchEnd(batchId);
       await expect(core.processDailyBatch(batchId)).to.not.be.reverted;
 
       const [, , , , , , processed] = await core.getDailyPnl.staticCall(
@@ -320,6 +321,7 @@ describe("VaultWithMarkets E2E", () => {
 
       // Process batch
       const batchId = tSet / BATCH_SECONDS;
+      await advancePastBatchEnd(batchId);
       await core.processDailyBatch(batchId);
 
       // Verify batch processed successfully

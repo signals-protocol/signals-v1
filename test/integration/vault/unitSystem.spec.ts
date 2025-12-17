@@ -17,8 +17,8 @@
 
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { WAD } from "../../helpers/constants";
+import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
+import { WAD, BATCH_SECONDS, advancePastBatchEnd } from "../../helpers/constants";
 
 describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
   const WAD_DECIMALS = 18n;
@@ -161,6 +161,12 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
       // Seed vault
       await proxy.connect(owner).seedVault(10_000_000n); // 10 USDC
 
+      // Advance time past batch end
+      const currentBatchId = await proxy.getCurrentBatchId();
+      const nextBatchEnd = (currentBatchId + 2n) * BATCH_SECONDS;
+      await time.setNextBlockTimestamp(Number(nextBatchEnd) + 1);
+      await ethers.provider.send("evm_mine", []);
+
       return { owner, depositor, payment, proxy, module };
     }
 
@@ -171,6 +177,7 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
       // First, change price by processing a batch with P&L
       const currentBatchId = await proxy.getCurrentBatchId();
       await proxy.harnessRecordPnl(currentBatchId + 1n, ethers.parseEther("1"), 0n, ethers.parseEther("500"));
+      await advancePastBatchEnd(currentBatchId + 1n);
       await proxy.processDailyBatch(currentBatchId + 1n);
 
       // Now price != 1.0, deposit may have residual
@@ -181,6 +188,7 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
       // Process batch
       const nextBatchId = await proxy.getCurrentBatchId();
       await proxy.harnessRecordPnl(nextBatchId + 1n, 0n, 0n, ethers.parseEther("500"));
+      await advancePastBatchEnd(nextBatchId + 1n);
       await proxy.processDailyBatch(nextBatchId + 1n);
 
       // Claim deposit
@@ -210,6 +218,7 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
       
       const currentBatchId = await proxy.getCurrentBatchId();
       await proxy.harnessRecordPnl(currentBatchId + 1n, 0n, 0n, ethers.parseEther("500"));
+      await advancePastBatchEnd(currentBatchId + 1n);
       await proxy.processDailyBatch(currentBatchId + 1n);
       
       await proxy.connect(depositor).claimDeposit(0n);
@@ -273,6 +282,7 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
 
       const currentBatchId = await proxy.getCurrentBatchId();
       await proxy.harnessRecordPnl(currentBatchId + 1n, 0n, 0n, ethers.parseEther("500"));
+      await advancePastBatchEnd(currentBatchId + 1n);
       await proxy.processDailyBatch(currentBatchId + 1n);
 
       await proxy.connect(owner).claimWithdraw(0n);
@@ -397,6 +407,7 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
 
       const currentBatchId = await proxy.getCurrentBatchId();
       await proxy.harnessRecordPnl(currentBatchId + 1n, ethers.parseEther("100"), 0n, ethers.parseEther("500"));
+      await advancePastBatchEnd(currentBatchId + 1n);
       await proxy.processDailyBatch(currentBatchId + 1n);
 
       // Get batch aggregation to check batchPrice

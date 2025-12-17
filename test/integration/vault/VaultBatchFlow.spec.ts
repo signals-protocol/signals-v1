@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { LPVaultModuleProxy, MockERC20 } from "../../../typechain-types";
-import { WAD } from "../../helpers/constants";
+import { WAD, advancePastBatchEnd } from "../../helpers/constants";
 
 // Phase 6: Helper for 6-decimal token amounts
 // paymentToken is USDC6 (6 decimals), internal accounting uses WAD (18 decimals)
@@ -98,6 +98,7 @@ describe("VaultBatchFlow Integration", () => {
     deltaEt: bigint = DEFAULT_DELTA_ET
   ) {
     await proxy.harnessRecordPnl(batchId, pnl, fees, deltaEt);
+    await advancePastBatchEnd(batchId);
     await proxy.processDailyBatch(batchId);
   }
 
@@ -221,6 +222,7 @@ describe("VaultBatchFlow Integration", () => {
       const moduleAtProxy = module.attach(proxy.target);
 
       await proxy.harnessRecordPnl(firstBatchId, 0n, 0n, DEFAULT_DELTA_ET);
+      await advancePastBatchEnd(firstBatchId);
       await expect(proxy.processDailyBatch(firstBatchId)).to.emit(
         moduleAtProxy,
         "DailyBatchProcessed"
