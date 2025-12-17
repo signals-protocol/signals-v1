@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "../core/storage/SignalsCoreStorage.sol";
 import "../lib/FixedPointMathU.sol";
-import "../lib/RiskMathLib.sol";
+import "./risk/lib/RiskMathLib.sol";
 import "../errors/ModuleErrors.sol";
 
 /// @title RiskModule

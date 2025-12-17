@@ -7,7 +7,7 @@ import {
   TradeModule,
   SignalsPosition,
 } from "../../typechain-types";
-import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
+import { ISignalsCore } from "../../typechain-types/contracts/testonly/TradeModuleProxy";
 import { WAD, USDC_DECIMALS } from "./constants";
 
 // ============================================================

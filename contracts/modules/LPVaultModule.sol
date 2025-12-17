@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "../core/storage/SignalsCoreStorage.sol";
 import "../vault/lib/VaultAccountingLib.sol";
-import "../lib/FeeWaterfallLib.sol";
+import "../vault/lib/FeeWaterfallLib.sol";
 import "../lib/FixedPointMathU.sol";
 import "../errors/ModuleErrors.sol";
 import "../errors/CLMSRErrors.sol";
@@ -76,7 +76,6 @@ contract LPVaultModule is SignalsCoreStorage {
     // ============================================================
     // Errors
     // ============================================================
-    error NotDelegated();
     error VaultNotSeeded();
     error VaultAlreadySeeded();
     error InsufficientSeedAmount(uint256 provided, uint256 required);
@@ -92,7 +91,7 @@ contract LPVaultModule is SignalsCoreStorage {
     // Modifiers
     // ============================================================
     modifier onlyDelegated() {
-        if (address(this) == self) revert NotDelegated();
+        if (address(this) == self) revert ModuleErrors.NotDelegated();
         _;
     }
 

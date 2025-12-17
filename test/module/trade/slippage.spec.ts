@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
 import { deployMinimalTradeSystem } from "../../helpers/deploy";
-import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleProxy";
+import { ISignalsCore } from "../../../typechain-types/contracts/testonly/TradeModuleProxy";
 import { WAD } from "../../helpers/constants";
 
 describe("TradeModule slippage and bounds", () => {

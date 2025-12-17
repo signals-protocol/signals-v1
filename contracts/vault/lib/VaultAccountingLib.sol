@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "../../lib/FixedPointMathU.sol";
-import "../../lib/FeeWaterfallLib.sol";
+import "./FeeWaterfallLib.sol";
 
 /**
  * @title VaultAccountingLib

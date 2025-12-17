@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./FixedPointMathU.sol";
+import "../../lib/FixedPointMathU.sol";
 
 /// @title FeeWaterfallLib
 /// @notice Pure library implementing the Fee Waterfall algorithm from whitepaper Sec 4.3-4.6

@@ -6,7 +6,7 @@ import {
   OracleModule,
   SignalsCoreHarness,
 } from "../../../typechain-types";
-import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleHarness";
+import { ISignalsCore } from "../../../typechain-types/contracts/testonly/TradeModuleHarness";
 import {
   DATA_FEED_ID,
   FEED_DECIMALS,

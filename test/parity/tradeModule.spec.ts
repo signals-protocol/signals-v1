@@ -9,7 +9,7 @@ import {
   SignalsPosition,
   TestERC1967Proxy,
 } from "../../typechain-types";
-import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
+import { ISignalsCore } from "../../typechain-types/contracts/testonly/TradeModuleProxy";
 import { WAD } from "../helpers/constants";
 
 interface DeployedSystem {

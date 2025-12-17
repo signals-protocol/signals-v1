@@ -9,10 +9,10 @@ import "../errors/CLMSRErrors.sol";
 import "../errors/ModuleErrors.sol";
 import "../core/lib/SignalsDistributionMath.sol";
 import "../core/lib/SignalsClmsrMath.sol";
-import "../lib/LazyMulSegmentTree.sol";
+import "./trade/lib/LazyMulSegmentTree.sol";
 import "../lib/FixedPointMathU.sol";
-import "../lib/ExposureFenwickLib.sol";
-import "../lib/TickBinLib.sol";
+import "./trade/lib/ExposureFenwickLib.sol";
+import "./trade/lib/TickBinLib.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IOwnableLite {

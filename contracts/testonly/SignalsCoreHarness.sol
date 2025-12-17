@@ -2,9 +2,9 @@
 pragma solidity ^0.8.24;
 
 import "../core/SignalsCore.sol";
-import "../lib/LazyMulSegmentTree.sol";
-import "../lib/ExposureFenwickLib.sol";
-import "../lib/TickBinLib.sol";
+import "../modules/trade/lib/LazyMulSegmentTree.sol";
+import "../modules/trade/lib/ExposureFenwickLib.sol";
+import "../modules/trade/lib/TickBinLib.sol";
 import "../interfaces/IRiskModule.sol";
 
 /// @notice Harness extending SignalsCore with helpers to seed markets/trees for tests.

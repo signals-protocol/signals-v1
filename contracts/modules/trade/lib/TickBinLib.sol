@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "../interfaces/ISignalsCore.sol";
+import "../../../interfaces/ISignalsCore.sol";
+import "../../../errors/CLMSRErrors.sol";
 
 /**
  * @title TickBinLib
@@ -31,13 +32,16 @@ library TickBinLib {
         int256 offset = tick - market.minTick;
         
         // Tick must be >= minTick and aligned to tickSpacing
-        require(offset >= 0, "TickBin: tick below minTick");
-        require(offset % market.tickSpacing == 0, "TickBin: tick not aligned");
+        if (offset < 0 || offset % market.tickSpacing != 0) {
+            revert CLMSRErrors.InvalidTick(tick, market.minTick, market.maxTick);
+        }
         
         bin = uint32(uint256(offset / market.tickSpacing));
         
         // Bin must be within valid range
-        require(bin < market.numBins, "TickBin: bin out of bounds");
+        if (bin >= market.numBins) {
+            revert CLMSRErrors.RangeBinsOutOfBounds(bin, bin, market.numBins);
+        }
     }
 
     /**
@@ -55,13 +59,23 @@ library TickBinLib {
         int256 upperTick
     ) internal pure returns (uint32 loBin, uint32 hiBin) {
         // Validate tick range
-        require(lowerTick < upperTick, "TickBin: invalid tick range");
-        require(lowerTick >= market.minTick, "TickBin: lower tick below minTick");
-        require(upperTick <= market.maxTick + market.tickSpacing, "TickBin: upper tick above maxTick");
+        if (lowerTick >= upperTick) {
+            revert CLMSRErrors.InvalidTickRange(lowerTick, upperTick);
+        }
+        if (lowerTick < market.minTick) {
+            revert CLMSRErrors.InvalidTick(lowerTick, market.minTick, market.maxTick);
+        }
+        if (upperTick > market.maxTick + market.tickSpacing) {
+            revert CLMSRErrors.InvalidTick(upperTick, market.minTick, market.maxTick);
+        }
         
         // Check alignment
-        require((lowerTick - market.minTick) % market.tickSpacing == 0, "TickBin: lower tick not aligned");
-        require((upperTick - market.minTick) % market.tickSpacing == 0, "TickBin: upper tick not aligned");
+        if ((lowerTick - market.minTick) % market.tickSpacing != 0) {
+            revert CLMSRErrors.InvalidTickSpacing(lowerTick, market.tickSpacing);
+        }
+        if ((upperTick - market.minTick) % market.tickSpacing != 0) {
+            revert CLMSRErrors.InvalidTickSpacing(upperTick, market.tickSpacing);
+        }
         
         // Convert to 0-based bin indices
         // lowerTick → loBin (inclusive)
@@ -72,8 +86,12 @@ library TickBinLib {
         hiBin = uint32(uint256((upperTick - market.minTick) / market.tickSpacing)) - 1;
         
         // Validate bin range
-        require(loBin <= hiBin, "TickBin: invalid bin range");
-        require(hiBin < market.numBins, "TickBin: hiBin out of bounds");
+        if (loBin > hiBin) {
+            revert CLMSRErrors.InvalidRangeBins(loBin, hiBin);
+        }
+        if (hiBin >= market.numBins) {
+            revert CLMSRErrors.RangeBinsOutOfBounds(loBin, hiBin, market.numBins);
+        }
     }
 }
 

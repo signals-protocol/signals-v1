@@ -8,7 +8,7 @@ import {
   TradeModuleProxy,
   SignalsPosition,
 } from "../../../typechain-types";
-import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleProxy";
+import { ISignalsCore } from "../../../typechain-types/contracts/testonly/TradeModuleProxy";
 import { WAD, USDC_DECIMALS, SMALL_QUANTITY, MEDIUM_QUANTITY } from "../../helpers/constants";
 
 /**

@@ -5,7 +5,7 @@ import "../core/storage/SignalsCoreStorage.sol";
 import "../interfaces/ISignalsCore.sol";
 import "../interfaces/ISignalsPosition.sol";
 import "../interfaces/IFeePolicy.sol";
-import "../lib/LazyMulSegmentTree.sol";
+import "../modules/trade/lib/LazyMulSegmentTree.sol";
 
 /// @notice Minimal core proxy to delegate trade/view calls to TradeModule for tests.
 contract TradeModuleProxy is SignalsCoreStorage {

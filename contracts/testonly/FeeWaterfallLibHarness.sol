@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "../lib/FeeWaterfallLib.sol";
+import "../vault/lib/FeeWaterfallLib.sol";
 
 /// @title FeeWaterfallLibHarness
 /// @notice Test harness to expose FeeWaterfallLib internal functions

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "../lib/LazyMulSegmentTree.sol";
+import "../modules/trade/lib/LazyMulSegmentTree.sol";
 import "../core/lib/SignalsClmsrMath.sol";
 import "../core/lib/SignalsDistributionMath.sol";
 

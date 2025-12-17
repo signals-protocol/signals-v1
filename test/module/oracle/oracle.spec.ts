@@ -6,7 +6,7 @@ import {
   OracleModule,
   SignalsCoreHarness,
 } from "../../../typechain-types";
-import { ISignalsCore } from "../../../typechain-types/contracts/harness/TradeModuleHarness";
+import { ISignalsCore } from "../../../typechain-types/contracts/testonly/TradeModuleHarness";
 import {
   DATA_FEED_ID,
   FEED_DECIMALS,
@@ -149,7 +149,7 @@ describe("OracleModule", () => {
         [authorisedWallets[0]]
       );
 
-      await expect(
+    await expect(
         submitWithPayload(core, owner, 1, payload)
       ).to.be.revertedWithCustomError(oracleModule, "InsufficientNumberOfUniqueSigners");
     });
@@ -186,7 +186,7 @@ describe("OracleModule", () => {
       await time.setNextBlockTimestamp(blockTs);
       const payload = buildRedstonePayload(2, blockTs, authorisedWallets);
 
-      await expect(
+    await expect(
         submitWithPayload(core, owner, 1, payload)
       ).to.be.revertedWithCustomError(oracleModule, "OracleSampleTooEarly");
     });
@@ -200,7 +200,7 @@ describe("OracleModule", () => {
       await time.setNextBlockTimestamp(blockTs);
       const payload = buildRedstonePayload(2, blockTs, authorisedWallets);
 
-      await expect(
+    await expect(
         submitWithPayload(core, owner, 1, payload)
       ).to.be.revertedWithCustomError(oracleModule, "SettlementWindowClosed");
     });

@@ -4,10 +4,10 @@ pragma solidity ^0.8.24;
 import "../core/storage/SignalsCoreStorage.sol";
 import "../errors/ModuleErrors.sol";
 import "../errors/CLMSRErrors.sol";
-import "../lib/LazyMulSegmentTree.sol";
+import "./trade/lib/LazyMulSegmentTree.sol";
 import "../lib/FixedPointMathU.sol";
-import "../lib/ExposureFenwickLib.sol";
-import "../lib/TickBinLib.sol";
+import "./trade/lib/ExposureFenwickLib.sol";
+import "./trade/lib/TickBinLib.sol";
 
 /// @notice Delegate-only lifecycle module (skeleton)
 contract MarketLifecycleModule is SignalsCoreStorage {

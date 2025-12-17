@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {FixedPointMathU} from "./FixedPointMathU.sol";
-import {CE} from "../errors/CLMSRErrors.sol";
+import {FixedPointMathU} from "../../../lib/FixedPointMathU.sol";
+import {CE} from "../../../errors/CLMSRErrors.sol";
 
 /// @notice Lazy multiplication segment tree used by CLMSR math (ported from v0).
 library LazyMulSegmentTree {

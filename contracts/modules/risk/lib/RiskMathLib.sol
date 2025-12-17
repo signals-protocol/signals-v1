@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./FixedPointMathU.sol";
+import "../../../lib/FixedPointMathU.sol";
 
 /// @title RiskMathLib
 /// @notice Core risk calculation library for Signals Protocol

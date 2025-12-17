@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { SignalsPosition } from "../../typechain-types";
-import { ISignalsCore } from "../../typechain-types/contracts/harness/TradeModuleProxy";
+import { ISignalsCore } from "../../typechain-types/contracts/testonly/TradeModuleProxy";
 import { WAD, USDC_DECIMALS, SMALL_QUANTITY } from "../helpers/constants";
 
 /**
