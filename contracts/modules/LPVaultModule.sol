@@ -7,6 +7,7 @@ import "../lib/FeeWaterfallLib.sol";
 import "../lib/FixedPointMathU.sol";
 import "../errors/ModuleErrors.sol";
 import "../errors/CLMSRErrors.sol";
+import "../interfaces/ISignalsLPShare.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
@@ -128,6 +129,11 @@ contract LPVaultModule is SignalsCoreStorage {
         lpVault.lastBatchTimestamp = uint64(block.timestamp);
         lpVault.isSeeded = true;
 
+        // Phase 10: Mint LP share tokens to seeder
+        if (lpShareToken != address(0)) {
+            ISignalsLPShare(lpShareToken).mint(msg.sender, seedAmountWad);
+        }
+
         // Initialize currentBatchId as a day-key so that:
         // - MarketLifecycleModule records P&L into batchId = settlementTimestamp / BATCH_SECONDS
         // - LPVaultModule processes batches strictly sequentially (currentBatchId + 1)
@@ -190,6 +196,12 @@ contract LPVaultModule is SignalsCoreStorage {
         if (shares == 0) revert ZeroAmount();
         if (!lpVault.isSeeded) revert VaultNotSeeded();
 
+        // Phase 10: Burn LP share tokens from user at request time
+        // This ensures shares are escrowed and can't be double-spent
+        if (lpShareToken != address(0)) {
+            ISignalsLPShare(lpShareToken).burn(msg.sender, shares);
+        }
+
         requestId = nextWithdrawRequestId++;
         uint64 eligibleBatchId = currentBatchId + withdrawalLagBatches + 1;
 
@@ -251,6 +263,11 @@ contract LPVaultModule is SignalsCoreStorage {
 
         req.status = RequestStatus.Cancelled;
         _pendingBatchTotals[eligibleBatchId].withdraws -= shares;
+
+        // Phase 10: Refund LP share tokens to user on cancel
+        if (lpShareToken != address(0)) {
+            ISignalsLPShare(lpShareToken).mint(msg.sender, shares);
+        }
 
         emit WithdrawRequestCancelled(requestId, msg.sender, shares);
     }
@@ -468,7 +485,10 @@ contract LPVaultModule is SignalsCoreStorage {
         shares = req.amount.wDiv(agg.batchPrice);
         req.status = RequestStatus.Claimed;
 
-        // Note: Phase 7 will mint ERC-4626 LP tokens here
+        // Phase 10: Mint LP share tokens to depositor
+        if (lpShareToken != address(0)) {
+            ISignalsLPShare(lpShareToken).mint(msg.sender, shares);
+        }
 
         emit DepositClaimed(requestId, msg.sender, req.amount, shares);
     }

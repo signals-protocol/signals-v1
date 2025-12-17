@@ -17,6 +17,9 @@ abstract contract SignalsCoreStorage {
 
     IERC20 public paymentToken;
     ISignalsPosition public positionContract;
+    
+    /// @notice LP Share token (ERC-4626 compatible)
+    address public lpShareToken;
 
     mapping(uint256 => ISignalsCore.Market) public markets;
     mapping(uint256 => LazyMulSegmentTree.Tree) public marketTrees;
