@@ -21,11 +21,11 @@ library FixedPointMathU {
     // ============================================================
 
     /// @dev 6-decimal → 18-decimal (multiply by 1e12)
-    /// @notice Safe: max 6-dec value * 1e12 fits in uint256
+    /// @notice Overflow-safe: explicitly checks before multiplication
     function toWad(uint256 x) internal pure returns (uint256) {
-        unchecked {
-            return x * SCALE_DIFF;
-        }
+        // Explicit overflow check to prevent wrap-around
+        if (x > type(uint256).max / SCALE_DIFF) revert FP_Overflow();
+        return x * SCALE_DIFF;
     }
 
     /// @dev 18-decimal → 6-decimal (truncates/floor)
@@ -166,17 +166,26 @@ library FixedPointMathU {
         return sum;
     }
 
-    /// @notice Natural log using series approximation
-    /// @dev ln(x) ~ 2 * atanh((x-1)/(x+1)) for x > 0
-    ///      Uses safe wDiv and wMul throughout
+    /// @notice Natural logarithm using series approximation
+    /// @dev ln(x) ~ 2 * atanh((x-1)/(x+1)) for x >= 1
+    ///      CRITICAL: x MUST be >= WAD. Reverts if x < WAD.
+    ///      This is by design: ln(x<1) is negative, which uint256 cannot represent.
+    ///      All CLMSR ratio calculations ensure ratio >= 1 before calling this.
+    /// @param xWad Input value in WAD (MUST be >= WAD = 1e18)
+    /// @return Natural logarithm of x in WAD
     function wLn(uint256 xWad) internal pure returns (uint256) {
-        if (xWad == 0) revert FP_InvalidInput();
-        // ln(x) ~ 2 * atanh((x-1)/(x+1))
-        uint256 num = xWad > WAD ? xWad - WAD : WAD - xWad;
+        // CRITICAL: Reject x < 1 (ln would be negative, cannot represent in uint256)
+        if (xWad < WAD) revert FP_InvalidInput();
+        if (xWad == WAD) return 0; // ln(1) = 0
+
+        // ln(x) ~ 2 * atanh((x-1)/(x+1)) for x > 0
+        // Since xWad >= WAD, num = xWad - WAD >= 0
+        uint256 num = xWad - WAD;
         uint256 den = xWad + WAD;
         uint256 z = wDiv(num, den);
         uint256 zPow = z;
         uint256 res = 0;
+
         // 10 terms of series: sum(z^(2k+1) / (2k+1)) for k=0..9
         for (uint256 i = 1; i < 20; i += 2) {
             // term = zPow / i (i is integer, not WAD)
@@ -184,12 +193,9 @@ library FixedPointMathU {
             res += term;
             zPow = wMul(zPow, wMul(z, z));
         }
+
         // Multiply by 2 (res is already in WAD)
-        res = res * 2;
-        if (xWad < WAD) {
-            return WAD - res;
-        }
-        return res;
+        return res * 2;
     }
 
     // ============================================================
