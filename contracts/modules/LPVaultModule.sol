@@ -74,6 +74,15 @@ contract LPVaultModule is SignalsCoreStorage {
     event WithdrawClaimed(uint64 indexed requestId, address indexed owner, uint256 shares, uint256 assets);
 
     // ============================================================
+    // Constants
+    // ============================================================
+    /// @notice Minimum dead shares locked forever to prevent shares=0 brick (ERC-4626 pattern)
+    /// @dev These shares are minted to address(1) at seed time and can never be withdrawn
+    uint256 public constant MIN_DEAD_SHARES = 1000;  // 1000 wei shares
+    /// @notice Dead address that holds minimum shares (cannot withdraw)
+    address public constant DEAD_ADDRESS = address(1);
+
+    // ============================================================
     // Errors
     // ============================================================
     error VaultNotSeeded();
@@ -87,6 +96,8 @@ contract LPVaultModule is SignalsCoreStorage {
     error RequestNotOwned(uint64 requestId, address owner, address caller);
     error RequestNotPending(uint64 requestId);
     error BatchNotProcessed(uint64 batchId);
+    /// @notice Withdrawal would reduce total shares below minimum (HIGH-02 fix)
+    error WithdrawalWouldBrickVault(uint256 totalSharesAfter, uint256 minRequired);
 
     // ============================================================
     // Modifiers
@@ -129,9 +140,15 @@ contract LPVaultModule is SignalsCoreStorage {
         lpVault.lastBatchTimestamp = uint64(block.timestamp);
         lpVault.isSeeded = true;
 
-        // Phase 10: Mint LP share tokens to seeder
+        // HIGH-02: Mint dead shares to prevent shares=0 brick
+        // These shares are locked forever in DEAD_ADDRESS and can never be withdrawn
+        // This ensures totalShares > MIN_DEAD_SHARES always after seeding
+        uint256 seederShares = seedAmountWad - MIN_DEAD_SHARES;
+        
+        // Phase 10: Mint LP share tokens (seeder gets all except dead shares)
         if (lpShareToken != address(0)) {
-            ISignalsLPShare(lpShareToken).mint(msg.sender, seedAmountWad);
+            ISignalsLPShare(lpShareToken).mint(msg.sender, seederShares);
+            ISignalsLPShare(lpShareToken).mint(DEAD_ADDRESS, MIN_DEAD_SHARES);
         }
 
         // Initialize currentBatchId as a day-key so that:
@@ -232,6 +249,13 @@ contract LPVaultModule is SignalsCoreStorage {
 
         uint256 amountWad = req.amount;  // Stored as WAD
         uint64 eligibleBatchId = req.eligibleBatchId;
+
+        // CRITICAL-01: Prevent cancel after batch processed (too-late check)
+        // Once batch is processed, deposit is already reflected in NAV/shares
+        // Allowing cancel would enable double-spending of funds
+        if (_batchAggregations[eligibleBatchId].processed) {
+            revert CE.CancelTooLate(requestId, eligibleBatchId);
+        }
 
         req.status = RequestStatus.Cancelled;
         _pendingBatchTotals[eligibleBatchId].deposits -= amountWad;
@@ -358,6 +382,13 @@ contract LPVaultModule is SignalsCoreStorage {
                 batchPrice,
                 totalWithdraws
             );
+            
+            // HIGH-02: Prevent shares from dropping below MIN_DEAD_SHARES
+            // This ensures the vault can never brick due to zero shares
+            if (currentShares < MIN_DEAD_SHARES) {
+                revert WithdrawalWouldBrickVault(currentShares, MIN_DEAD_SHARES);
+            }
+            
             // HIGH-01: Reserve withdrawal funds (conservative floor rounding)
             // Use floor to ensure we never over-reserve
             uint256 withdrawAssets6 = withdrawAssetsWad.fromWad();
@@ -366,14 +397,18 @@ contract LPVaultModule is SignalsCoreStorage {
 
         // Step 5: Process deposits (at batch price)
         if (totalDeposits > 0) {
-            (currentNav, currentShares, , ) = VaultAccountingLib.applyDeposit(
+            uint256 totalRefund;
+            (currentNav, currentShares, , totalRefund) = VaultAccountingLib.applyDeposit(
                 currentNav,
                 currentShares,
                 batchPrice,
                 totalDeposits
             );
-            // Phase 6: Release pending deposits (now converted to shares)
-            _totalPendingDeposits6 -= totalDeposits.fromWad();
+            // Release only the "used" portion from pending deposits
+            // amountUsed = totalDeposits - totalRefund
+            // The "refund" portion remains in pending until individual claims release it
+            uint256 amountUsed = totalDeposits - totalRefund;
+            _totalPendingDeposits6 -= amountUsed.fromWad();
         }
 
         // Step 6: Compute final state
@@ -493,12 +528,30 @@ contract LPVaultModule is SignalsCoreStorage {
         BatchAggregation storage agg = _batchAggregations[req.eligibleBatchId];
         if (!agg.processed) revert BatchNotProcessed(req.eligibleBatchId);
 
+        // WP v2 Sec 3.4: shares = floor(amount / batchPrice)
         shares = req.amount.wDiv(agg.batchPrice);
+        
+        // WP v2 Appendix C: "Deposit residual refunded to depositor (vault never retains)"
+        // Calculate: used = shares * batchPrice, refund = amount - used
+        uint256 usedWad = shares.wMul(agg.batchPrice);
+        uint256 refundWad = req.amount - usedWad;
+        
         req.status = RequestStatus.Claimed;
 
         // Phase 10: Mint LP share tokens to depositor
         if (lpShareToken != address(0)) {
             ISignalsLPShare(lpShareToken).mint(msg.sender, shares);
+        }
+        
+        // Refund residual to depositor (convert WAD to 6 decimals)
+        // Note: Any sub-wei residual (< 1e12) is lost, but this is negligible
+        if (refundWad > 0) {
+            uint256 refund6 = refundWad.fromWad();
+            if (refund6 > 0) {
+                // Release from pending deposits since this portion wasn't used
+                _totalPendingDeposits6 -= refund6;
+                paymentToken.safeTransfer(msg.sender, refund6);
+            }
         }
 
         emit DepositClaimed(requestId, msg.sender, req.amount, shares);

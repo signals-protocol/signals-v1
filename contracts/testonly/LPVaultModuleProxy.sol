@@ -218,6 +218,16 @@ contract LPVaultModuleProxy is SignalsCoreStorage {
         return currentBatchId;
     }
 
+    /// @notice Mirror of LPVaultModule.MIN_DEAD_SHARES for testing
+    function MIN_DEAD_SHARES() external pure returns (uint256) {
+        return 1000;  // Must match LPVaultModule.MIN_DEAD_SHARES
+    }
+
+    /// @notice Mirror of LPVaultModule.DEAD_ADDRESS for testing
+    function DEAD_ADDRESS() external pure returns (address) {
+        return address(1);  // Must match LPVaultModule.DEAD_ADDRESS
+    }
+
     // ============================================================
     // Internal
     // ============================================================

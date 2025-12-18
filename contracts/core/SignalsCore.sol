@@ -230,7 +230,9 @@ contract SignalsCore is
         ));
     }
 
-    function claimPayout(uint256 positionId) external override whenNotPaused nonReentrant {
+    /// @notice Claim payout from settled position
+    /// @dev Allowed even when paused - user funds should always be claimable after settlement
+    function claimPayout(uint256 positionId) external override nonReentrant {
         _delegate(tradeModule, abi.encodeWithSignature("claimPayout(uint256)", positionId));
     }
 
@@ -515,12 +517,16 @@ contract SignalsCore is
         _delegate(vaultModule, abi.encodeWithSignature("processDailyBatch(uint64)", batchId));
     }
 
-    function claimDeposit(uint64 requestId) external whenNotPaused nonReentrant returns (uint256 shares) {
+    /// @notice Claim shares from processed deposit
+    /// @dev Allowed even when paused - user funds should always be claimable after batch processing
+    function claimDeposit(uint64 requestId) external nonReentrant returns (uint256 shares) {
         bytes memory ret = _delegate(vaultModule, abi.encodeWithSignature("claimDeposit(uint64)", requestId));
         if (ret.length > 0) shares = abi.decode(ret, (uint256));
     }
 
-    function claimWithdraw(uint64 requestId) external whenNotPaused nonReentrant returns (uint256 assets) {
+    /// @notice Claim assets from processed withdrawal
+    /// @dev Allowed even when paused - user funds should always be claimable after batch processing
+    function claimWithdraw(uint64 requestId) external nonReentrant returns (uint256 assets) {
         bytes memory ret = _delegate(vaultModule, abi.encodeWithSignature("claimWithdraw(uint64)", requestId));
         if (ret.length > 0) assets = abi.decode(ret, (uint256));
     }
