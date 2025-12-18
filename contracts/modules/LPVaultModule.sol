@@ -261,6 +261,12 @@ contract LPVaultModule is SignalsCoreStorage {
         uint256 shares = req.shares;
         uint64 eligibleBatchId = req.eligibleBatchId;
 
+        // CRITICAL-03: Prevent cancel after batch processed (too-late check)
+        // Once batch is processed, withdrawal is reserved in vault accounting
+        if (_batchAggregations[eligibleBatchId].processed) {
+            revert CE.CancelTooLate(requestId, eligibleBatchId);
+        }
+
         req.status = RequestStatus.Cancelled;
         _pendingBatchTotals[eligibleBatchId].withdraws -= shares;
 
@@ -301,6 +307,14 @@ contract LPVaultModule is SignalsCoreStorage {
 
         DailyPnlSnapshot storage snap = _dailyPnl[batchId];
         if (snap.processed) revert DailyBatchAlreadyProcessed(batchId);
+
+        // CRITICAL-02: Verify batch's market is settled (prevents settlement DoS)
+        // If batch has an associated market, it must be settled before batch processing
+        // Otherwise, _recordPnlToBatch would revert with BatchAlreadyProcessed
+        uint256 marketId = _batchIdToMarketId[batchId];
+        if (marketId != 0 && !markets[marketId].settled) {
+            revert CE.BatchMarketNotSettled(batchId, marketId);
+        }
 
         // Step 1: Get pre-aggregated totals (O(1))
         PendingBatchTotal storage pending = _pendingBatchTotals[batchId];

@@ -28,6 +28,8 @@ interface CLMSRErrors {
     error BatchAlreadyProcessed(uint64 batchId);
     error BatchNotProcessed(uint64 batchId);
     error BatchAlreadyHasMarket(uint64 batchId, uint256 existingMarketId);
+    error BatchMarketNotSettled(uint64 batchId, uint256 marketId);
+    error CancelTooLate(uint64 requestId, uint64 eligibleBatchId);
 
     /* Trade params */
     error InvalidTick(int256 tick, int256 minTick, int256 maxTick);
@@ -123,6 +125,8 @@ library CE {
     error BatchAlreadyProcessed(uint64 batchId);
     error BatchNotProcessed(uint64 batchId);
     error BatchAlreadyHasMarket(uint64 batchId, uint256 existingMarketId);
+    error BatchMarketNotSettled(uint64 batchId, uint256 marketId);
+    error CancelTooLate(uint64 requestId, uint64 eligibleBatchId);
 
     /* Trade params */
     error InvalidTick(int256 tick, int256 minTick, int256 maxTick);
