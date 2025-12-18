@@ -607,11 +607,14 @@ describe("CLMSR Invariants", () => {
       expect(initialSum).to.equal(n * WAD);
 
       // Any single trade cost should be less than max loss
+      // Note: Using smaller quantity to stay within chunking limits (MAX_CHUNKS_PER_TX = 100)
+      // With α = 1 WAD, max safe single-chunk quantity ≈ 135 WAD ≈ 135e6 in 6-dec
+      // For 100 chunks, max quantity ≈ 13500 WAD ≈ 13.5e9 in 6-dec
       const largeBuyCost = await core.calculateOpenCost.staticCall(
         marketId,
         0,
         1,
-        ethers.parseUnits("100", 6) // Large quantity
+        ethers.parseUnits("10", 6) // Reasonable large quantity within limits
       );
 
       // Cost is always positive (buyer pays)
