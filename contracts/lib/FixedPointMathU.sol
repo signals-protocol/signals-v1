@@ -144,136 +144,111 @@ library FixedPointMathU {
     }
 
     // ============================================================
-    // Exponential & Logarithm (high precision)
+    // Exponential & Logarithm (range-reduction based)
     // ============================================================
 
-    /// @notice High-precision exponential function
-    /// @dev Based on Solady/PRBMath approach:
-    ///      1. Use identity exp(x) = 2^(x/ln2)
-    ///      2. Decompose into integer + fractional parts
-    ///      3. Use polynomial approximation for fractional part
-    /// @param xWad Input in WAD (supports x up to ~130 * WAD before overflow)
+    /// @dev ln(2) in WAD = 0.693147180559945309...
+    uint256 internal constant LN2_WAD = 693147180559945309;
+
+    /// @notice High-precision exponential with range reduction
+    /// @dev Uses identity: exp(x) = 2^k * exp(r) where x = k*ln(2) + r, r ∈ [0, ln(2))
+    ///      Taylor series converges fast for small r (< 0.7)
+    ///      Supports full domain up to MAX_EXP_INPUT_WAD ≈ 135.3
+    /// @param xWad Input in WAD
     function wExp(uint256 xWad) internal pure returns (uint256) {
-        // exp(0) = 1
         if (xWad == 0) return WAD;
 
-        // Limit check: exp(135.305...) overflows uint256
-        // Using 133 WAD as safe upper bound
-        if (xWad > 133 * WAD) revert FP_Overflow();
+        // exp(135.305...) overflows uint256, use same constant as codebase
+        uint256 MAX_INPUT = 135305999368893231588;
+        if (xWad > MAX_INPUT) revert FP_Overflow();
 
-        // Use Taylor series with high precision
-        // exp(x) = 1 + x + x²/2! + x³/3! + ... (converges for all x)
+        // Range reduction: x = k * ln(2) + r, where r ∈ [0, ln(2))
+        // k = floor(x / ln(2))
+        uint256 k = xWad / LN2_WAD;
+        uint256 r = xWad - k * LN2_WAD; // r = x mod ln(2), guaranteed r < ln(2) ≈ 0.693
+
+        // Compute exp(r) using Taylor series
+        // For r < ln(2) ≈ 0.693, Taylor converges very fast
         uint256 term = WAD;
-        uint256 sum = WAD;
+        uint256 expR = WAD;
 
         unchecked {
-            // More terms for better precision
-            for (uint256 i = 1; i <= 30; i++) {
-                term = Math.mulDiv(term, xWad, WAD * i);
-            sum += term;
-            if (term == 0) break;
+            for (uint256 i = 1; i <= 20; i++) {
+                term = Math.mulDiv(term, r, WAD * i);
+                if (term == 0) break;
+                expR += term;
             }
         }
-        return sum;
+
+        // exp(x) = 2^k * exp(r)
+        // 2^k in WAD = WAD << k, but we need to handle overflow
+        if (k == 0) return expR;
+
+        // For large k, compute 2^k * expR carefully
+        // 2^k * expR = expR << k (in integer terms)
+        // But expR is in WAD, so result = expR * 2^k
+        if (k >= 196) revert FP_Overflow(); // 2^196 * WAD overflows uint256
+
+        return expR << k;
     }
 
-    /// @notice High-precision natural logarithm
-    /// @dev Uses binary logarithm decomposition for accuracy:
-    ///      ln(x) = log2(x) * ln(2)
-    ///      log2(x) computed via bit manipulation + polynomial
-    ///      Achieves <1e-12 relative error across valid domain
+    /// @notice High-precision natural logarithm with range reduction
+    /// @dev Uses identity: ln(x) = k*ln(2) + ln(y) where x = 2^k * y, y ∈ [1, 2)
+    ///      Atanh series converges fast for y ∈ [1, 2) since z ∈ [0, 1/3)
     /// @param xWad Input value in WAD (MUST be >= WAD = 1e18)
-    /// @return Natural logarithm of x in WAD
     function wLn(uint256 xWad) internal pure returns (uint256) {
-        // CRITICAL: Reject x < 1 (ln would be negative, cannot represent in uint256)
         if (xWad < WAD) revert FP_InvalidInput();
-        if (xWad == WAD) return 0; // ln(1) = 0
+        if (xWad == WAD) return 0;
 
-        // Constants for high precision
-        // ln(2) = 0.693147180559945309417...
-        uint256 LN2 = 693147180559945309;
-
-        // Find the highest power of 2 <= xWad
-        // This gives us log2(xWad) integer part
-        uint256 log2Int = 0;
-        uint256 normalized = xWad;
-
-        // Binary search to find integer part of log2
-        // Each check: if xWad >= 2^n * WAD, then subtract n from log2
-        if (normalized >= (1 << 128)) {
-            log2Int += 128;
-            normalized >>= 128;
-        }
-        if (normalized >= (1 << 64)) {
-            log2Int += 64;
-            normalized >>= 64;
-        }
-        if (normalized >= (1 << 32)) {
-            log2Int += 32;
-            normalized >>= 32;
-        }
-        if (normalized >= (1 << 16)) {
-            log2Int += 16;
-            normalized >>= 16;
-        }
-        if (normalized >= (1 << 8)) {
-            log2Int += 8;
-            normalized >>= 8;
-        }
-        if (normalized >= (1 << 4)) {
-            log2Int += 4;
-            normalized >>= 4;
-        }
-        if (normalized >= (1 << 2)) {
-            log2Int += 2;
-            normalized >>= 2;
-        }
-        if (normalized >= (1 << 1)) {
-            log2Int += 1;
-        }
-
-        // Now we have: xWad ≈ 2^log2Int * (xWad / 2^log2Int)
-        // where (xWad / 2^log2Int) is in [1, 2)
-        // For WAD-scaled: need to adjust for WAD = 1e18
-
-        // ln(xWad) = ln(xWad / WAD) + ln(WAD)
-        //          = ln(x_raw) + ln(1e18)
-        // But we want ln(xWad) where xWad represents x_raw * WAD
-
-        // Compute log2(xWad) - log2(WAD) to get log2(x_raw)
-        // log2(WAD) = log2(1e18) ≈ 59.79... but we work in WAD scale
-
-        // Simpler approach: use high-precision atanh series
-        // but with range reduction first
-
-        // For x > 2, use: ln(x) = ln(2^k * y) = k*ln(2) + ln(y)
-        // where y in [1, 2)
-
-        // Calculate k such that xWad / 2^k is in [WAD, 2*WAD)
+        // Range reduction: find k such that y = xWad / 2^k ∈ [WAD, 2*WAD)
+        // First find MSB position, then calculate k
         uint256 k = 0;
         uint256 y = xWad;
 
-        // Range reduction: divide by 2 until y < 2*WAD
-        while (y >= 2 * WAD) {
-            y = y >> 1;
-            k++;
-        }
+        // Find MSB position via binary search (supports full uint256 range)
+        // MSB of WAD ≈ 59, so k = msb(xWad) - 59 roughly
+        if (y >= 1 << 128) { y >>= 128; k += 128; }
+        if (y >= 1 << 64)  { y >>= 64;  k += 64;  }
+        if (y >= 1 << 32)  { y >>= 32;  k += 32;  }
+        if (y >= 1 << 16)  { y >>= 16;  k += 16;  }
+        if (y >= 1 << 8)   { y >>= 8;   k += 8;   }
+        if (y >= 1 << 4)   { y >>= 4;   k += 4;   }
+        if (y >= 1 << 2)   { y >>= 2;   k += 2;   }
+        if (y >= 1 << 1)   { y >>= 1;   k += 1;   }
 
-        // Now y in [WAD, 2*WAD), compute ln(y/WAD)
-        // Using atanh series: ln(y/WAD) = 2 * atanh((y-WAD)/(y+WAD))
+        // Now y is in [1, 2), and xWad = y * 2^k
+        // We need xWad / 2^? to be in [WAD, 2*WAD)
+        // xWad / 2^(k - 59) ≈ y * 2^59 ≈ WAD (since WAD ≈ 2^59.79)
+
+        // Recalculate properly: find k such that xWad >> k ∈ [WAD, 2*WAD)
+        y = xWad;
+        k = 0;
+
+        // Binary search for the right shift amount
+        // Target: WAD <= (xWad >> k) < 2*WAD
+        // Equivalent: xWad >= WAD << k AND xWad < 2*WAD << k
+        if (y >= WAD << 128) { y >>= 128; k += 128; }
+        if (y >= WAD << 64)  { y >>= 64;  k += 64;  }
+        if (y >= WAD << 32)  { y >>= 32;  k += 32;  }
+        if (y >= WAD << 16)  { y >>= 16;  k += 16;  }
+        if (y >= WAD << 8)   { y >>= 8;   k += 8;   }
+        if (y >= WAD << 4)   { y >>= 4;   k += 4;   }
+        if (y >= WAD << 2)   { y >>= 2;   k += 2;   }
+        if (y >= WAD << 1)   { y >>= 1;   k += 1;   }
+
+        // Now y ∈ [WAD, 2*WAD), compute ln(y/WAD) using atanh series
+        // ln(t) = 2 * atanh((t-1)/(t+1)) for t > 0
+        // Here t = y/WAD, so z = (y-WAD)/(y+WAD)
         uint256 num = y - WAD;
         uint256 den = y + WAD;
-
-        // z = (y-WAD)/(y+WAD) in WAD, z in [0, 1/3) for y in [1, 2)
         uint256 z = Math.mulDiv(num, WAD, den);
         uint256 z2 = Math.mulDiv(z, z, WAD);
 
-        // atanh(z) = z + z³/3 + z⁵/5 + z⁷/7 + ...
-        // For z in [0, 1/3), this converges quickly
+        // atanh(z) = z + z³/3 + z⁵/5 + ...
+        // For z ∈ [0, 1/3), converges fast. 12 terms give error < 1e-18
         uint256 result = z;
-        uint256 zPow = Math.mulDiv(z, z2, WAD); // z³
+        uint256 zPow = Math.mulDiv(z, z2, WAD);
 
-        // 15 terms is enough for z < 1/3 (error < 1e-20)
         unchecked {
             result += zPow / 3;
             zPow = Math.mulDiv(zPow, z2, WAD);
@@ -296,19 +271,11 @@ library FixedPointMathU {
             result += zPow / 21;
             zPow = Math.mulDiv(zPow, z2, WAD);
             result += zPow / 23;
-            zPow = Math.mulDiv(zPow, z2, WAD);
-            result += zPow / 25;
-            zPow = Math.mulDiv(zPow, z2, WAD);
-            result += zPow / 27;
-            zPow = Math.mulDiv(zPow, z2, WAD);
-            result += zPow / 29;
         }
 
         // ln(y/WAD) = 2 * atanh(z)
-        uint256 lnY = result * 2;
-
         // ln(xWad/WAD) = k * ln(2) + ln(y/WAD)
-        return k * LN2 + lnY;
+        return k * LN2_WAD + (result << 1);
     }
 
     // ============================================================

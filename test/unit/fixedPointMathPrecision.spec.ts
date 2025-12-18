@@ -135,10 +135,18 @@ describe("FixedPointMath Precision", () => {
 
   describe("wExp Accuracy", () => {
     // exp and ln should be inverse functions
-    it("exp(ln(x)) ≈ x for x in valid range", async () => {
+    it("exp(ln(x)) ≈ x for x in [1, 100] (MAX_FACTOR domain)", async () => {
       const { mathTest } = await loadFixture(deployMathFixture);
       
-      const testValues = [2n * WAD, 5n * WAD, 10n * WAD];
+      // Test across the full factor domain: [1, 100]
+      const testValues = [
+        2n * WAD,
+        5n * WAD,
+        10n * WAD,
+        20n * WAD,
+        50n * WAD,
+        100n * WAD, // MAX_FACTOR
+      ];
       
       for (const x of testValues) {
         const lnX = await mathTest.wLn(x);
@@ -148,17 +156,27 @@ describe("FixedPointMath Precision", () => {
         const relativeError = (diff * WAD) / x;
         
         expect(relativeError).to.be.lte(
-          MAX_RELATIVE_ERROR * 10n, // Allow slightly more error for composition
-          `exp(ln(${x})) round-trip error too large`
+          MAX_RELATIVE_ERROR * 10n,
+          `exp(ln(${x / WAD})) round-trip error too large: ${relativeError}`
         );
       }
     });
 
-    it("ln(exp(x)) ≈ x for small x", async () => {
+    it("ln(exp(x)) ≈ x for x in [0, MAX_EXP_INPUT] (full domain)", async () => {
       const { mathTest } = await loadFixture(deployMathFixture);
       
-      // Test with values that won't overflow exp
-      const testValues = [WAD / 10n, WAD / 2n, WAD];
+      // Test across the full exp input domain up to ~135 WAD
+      const testValues = [
+        WAD / 10n,      // 0.1
+        WAD / 2n,       // 0.5
+        WAD,            // 1
+        5n * WAD,       // 5
+        10n * WAD,      // 10
+        20n * WAD,      // 20
+        50n * WAD,      // 50
+        100n * WAD,     // 100
+        130n * WAD,     // 130 (near MAX_EXP_INPUT)
+      ];
       
       for (const x of testValues) {
         const expX = await mathTest.wExp(x);
@@ -169,9 +187,43 @@ describe("FixedPointMath Precision", () => {
         
         expect(relativeError).to.be.lte(
           MAX_RELATIVE_ERROR * 10n,
-          `ln(exp(${x})) round-trip error too large`
+          `ln(exp(${x / WAD})) round-trip error too large: ${relativeError}`
         );
       }
+    });
+
+    it("wExp handles MAX_EXP_INPUT without overflow", async () => {
+      const { mathTest } = await loadFixture(deployMathFixture);
+      
+      // MAX_EXP_INPUT_WAD ≈ 135.305... * 1e18
+      const maxInput = 135305999368893231588n;
+      
+      // Should not revert
+      const result = await mathTest.wExp(maxInput);
+      expect(result).to.be.gt(0n);
+    });
+
+    it("wExp reverts above MAX_EXP_INPUT", async () => {
+      const { mathTest } = await loadFixture(deployMathFixture);
+      
+      const tooLarge = 135305999368893231588n + WAD;
+      await expect(mathTest.wExp(tooLarge)).to.be.revertedWithCustomError(
+        mathTest,
+        "FP_Overflow"
+      );
+    });
+
+    it("wExp(100 WAD) works without revert", async () => {
+      const { mathTest } = await loadFixture(deployMathFixture);
+      
+      // exp(100) ≈ 2.69e43
+      const result = await mathTest.wExp(100n * WAD);
+      expect(result).to.be.gt(0n);
+      
+      // exp(100) should be approximately 2.69e43 * 1e18 = 2.69e61 in WAD
+      // Just verify it's in the right ballpark
+      expect(result).to.be.gt(10n ** 60n);
+      expect(result).to.be.lt(10n ** 62n);
     });
   });
 
