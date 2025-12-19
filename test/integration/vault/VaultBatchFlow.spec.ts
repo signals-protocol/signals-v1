@@ -4,8 +4,8 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { LPVaultModuleProxy, MockERC20 } from "../../../typechain-types";
 import { WAD, advancePastBatchEnd } from "../../helpers/constants";
 
-// Phase 6: Helper for 6-decimal token amounts
-// paymentToken is USDC6 (6 decimals), internal accounting uses WAD (18 decimals)
+// Helper for 6-decimal token amounts.
+// paymentToken is USDC6 (6 decimals), internal accounting uses WAD (18 decimals).
 function usdc(amount: string | number): bigint {
   return ethers.parseUnits(String(amount), 6);
 }
@@ -14,7 +14,7 @@ function usdc(amount: string | number): bigint {
  * VaultBatchFlow Integration Tests
  *
  * Tests LPVaultModule + VaultAccountingLib integration using Request ID model.
- * Reference: docs/vault-invariants.md, whitepaper Section 3
+ * Reference: docs/vault-invariants.md, whitepaper section 3
  */
 
 describe("VaultBatchFlow Integration", () => {
@@ -22,7 +22,7 @@ describe("VaultBatchFlow Integration", () => {
     const [owner, userA, userB, userC] = await ethers.getSigners();
 
     const MockERC20 = await ethers.getContractFactory("MockERC20");
-    // Phase 6: Use 6-decimal token as per WP v2 Sec 6.2 (paymentToken = USDC6)
+    // Use 6-decimal token (paymentToken = USDC6)
     const payment = (await MockERC20.deploy(
       "MockVaultToken",
       "MVT",
@@ -78,8 +78,8 @@ describe("VaultBatchFlow Integration", () => {
     const { proxy, userA } = fixture;
     // Seed with 6-decimal token amount (converts to 1000 WAD internally)
     await proxy.connect(userA).seedVault(usdc("1000"));
-    // WP v2: Initialize backstopNav for deltaEt calculation
-    // This ensures FeeWaterfall doesn't revert on grantNeed > deltaEt
+    // Initialize backstopNav for deltaEt calculation.
+    // This ensures FeeWaterfall doesn't revert on grantNeed > deltaEt.
     const backstopNav = ethers.parseEther("500"); // 500 WAD backstop
     await proxy.setCapitalStack(backstopNav, 0n);
     // deltaEt is now set per-batch via harnessRecordPnl, not globally

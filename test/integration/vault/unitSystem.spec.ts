@@ -1,7 +1,7 @@
 /**
- * UnitSystem Spec Tests (Phase 6 TDD)
+ * UnitSystem Spec Tests
  *
- * Whitepaper v2 Section 6.2 & Appendix C requirements:
+ * Whitepaper v2 section 6.2 & Appendix C requirements:
  * - External token transfers use USDC6 (6 decimals)
  * - Internal operations use WAD (1e18)
  * - Conversion happens exactly once at entry and once at exit
@@ -24,7 +24,7 @@ import {
   advancePastBatchEnd,
 } from "../../helpers/constants";
 
-describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
+describe("UnitSystem Spec Tests", () => {
   const WAD_DECIMALS = 18n;
   const USDC6_DECIMALS = 6n;
   const SCALE_FACTOR = 10n ** (WAD_DECIMALS - USDC6_DECIMALS); // 1e12
@@ -47,7 +47,6 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
 
   // ================================================================
   // SPEC-1: Trade debit rounds UP (user pays ceiling)
-  // (WP v2 Appendix C (a): "debits up / credits down")
   // ================================================================
   describe("SPEC-1: Trade debit rounds UP", () => {
     it("fromWadRoundUp rounds WAD amount to USDC6 ceiling", async () => {
@@ -94,7 +93,6 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
 
   // ================================================================
   // SPEC-2: Trade credit rounds DOWN (user receives floor)
-  // (WP v2 Appendix C (a): "debits up / credits down")
   // ================================================================
   describe("SPEC-2: Trade credit rounds DOWN", () => {
     it("fromWad rounds WAD amount to USDC6 floor", async () => {
@@ -124,8 +122,6 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
 
   // ================================================================
   // SPEC-3: Deposit residual is refunded to depositor
-  // (WP v2 Appendix C (b1): "residual A - A_used is refunded")
-  // (WP v2 Line 391: "vault does not keep it")
   // ================================================================
   describe("SPEC-3: Deposit residual refunded (not kept by vault)", () => {
     async function deployVaultFixture() {
@@ -254,7 +250,6 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
 
   // ================================================================
   // SPEC-4: Withdrawal dust stays in vault (LP benefit)
-  // (WP v2 Appendix C (b2): "dust stays in vault")
   // ================================================================
   describe("SPEC-4: Withdrawal dust stays in vault", () => {
     async function deployVaultFixture() {
@@ -323,7 +318,6 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
 
   // ================================================================
   // SPEC-5: Fee split dust goes to LP
-  // (WP v2 Appendix C (c): "residual dust goes to LP")
   // ================================================================
   describe("SPEC-5: Fee split dust goes to LP", () => {
     it("fee waterfall dust is attributed to LP", async () => {
@@ -365,8 +359,8 @@ describe("UnitSystem Spec Tests (WP v2 Sec 6.2 + Appendix C)", () => {
   // SPEC-6: Internal storage uses WAD, not USDC6
   // ================================================================
   describe("SPEC-6: Internal state is WAD-denominated", () => {
-    // Phase 6: Use 6-decimal token (paymentToken = USDC6)
-    // Internal state (NAV, shares, price) should be in WAD (18 decimals)
+    // Use 6-decimal token (paymentToken = USDC6).
+    // Internal state (NAV, shares, price) should be in WAD (18 decimals).
     async function deployVaultFixture() {
       const [owner] = await ethers.getSigners();
 

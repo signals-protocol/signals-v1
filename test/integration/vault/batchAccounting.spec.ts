@@ -1,7 +1,7 @@
 /**
- * BatchAccounting Spec Tests (Phase 6 TDD)
+ * BatchAccounting Spec Tests
  *
- * Whitepaper v2 Section 3 requirements:
+ * Whitepaper v2 section 3 requirements:
  * - processDailyBatch is the ONLY place that modifies NAV/Shares
  * - claimDeposit/claimWithdraw do NOT change NAV/Shares
  * - Pre-batch NAV equation: N^pre_t = N_{t-1} + L_t + F_t + G_t
@@ -16,17 +16,17 @@ import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { LPVaultModuleProxy, MockERC20 } from "../../../typechain-types";
 import { WAD, BATCH_SECONDS } from "../../helpers/constants";
 
-// Phase 6: Helper for 6-decimal token amounts
+// Helper for 6-decimal token amounts.
 function usdc(amount: string | number): bigint {
   return ethers.parseUnits(String(amount), 6);
 }
 
-describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
+describe("BatchAccounting Spec Tests", () => {
   async function deployVaultFixture() {
     const [owner, userA, userB] = await ethers.getSigners();
 
     const MockERC20 = await ethers.getContractFactory("MockERC20");
-    // Phase 6: Use 6-decimal token as per WP v2 Sec 6.2 (paymentToken = USDC6)
+    // Use 6-decimal token (paymentToken = USDC6)
     const payment = (await MockERC20.deploy(
       "MockVaultToken",
       "MVT",
@@ -75,7 +75,7 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
   async function deploySeededVaultFixture() {
     const fixture = await deployVaultFixture();
     await fixture.proxy.connect(fixture.owner).seedVault(usdc("1000"));
-    // V1 Phase 7: Set backstop and deltaEt for testing grant mechanics
+    // Set backstop and deltaEt for testing grant mechanics
     // Production V1 uses deltaEt = 0 (uniform prior), but tests need to verify grant flow
     const backstopNav = ethers.parseEther("500"); // 500 WAD backstop
     await fixture.proxy.setCapitalStack(backstopNav, 0n);
@@ -93,7 +93,6 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
 
   // ================================================================
   // SPEC-1: processDailyBatch is the ONLY place that modifies NAV/Shares
-  // (WP v2 Sec 3.6: batch algorithm specifies state updates)
   // ================================================================
   describe("SPEC-1: Only processDailyBatch modifies NAV/Shares", () => {
     it("requestDeposit does NOT change NAV or Shares", async () => {
@@ -218,7 +217,6 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
 
   // ================================================================
   // SPEC-2: Pre-batch NAV equation: N^pre_t = N_{t-1} + L_t + F_t + G_t
-  // (WP v2 Eq 3.4)
   // ================================================================
   describe("SPEC-2: Pre-batch NAV equation (INV-NAV)", () => {
     it("N^pre_t - N_{t-1} = L_t + F_t + G_t (positive P&L)", async () => {
@@ -294,7 +292,6 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
 
   // ================================================================
   // SPEC-3: Batch price equation: P^e_t = N^pre_t / S_{t-1}
-  // (WP v2 Eq 3.4)
   // ================================================================
   describe("SPEC-3: Batch price equation", () => {
     it("P^e_t = N^pre_t / S_{t-1}", async () => {
@@ -352,7 +349,6 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
 
   // ================================================================
   // SPEC-4: Price invariance during deposit/withdraw processing
-  // (WP v2 Sec 3.6: "N'/S' = P")
   // ================================================================
   describe("SPEC-4: Price invariance during batch processing", () => {
     it("price preserved after deposit processing", async () => {
@@ -428,8 +424,6 @@ describe("BatchAccounting Spec Tests (WP v2 Sec 3)", () => {
 
   // ================================================================
   // SPEC-5: Same market underwriters get same return
-  // (WP v2 Sec 3.1: "any two LP shares that underwrite the same
-  // sequence of daily markets earn exactly the same return")
   // ================================================================
   describe("SPEC-5: Same market underwriters get same return", () => {
     it("shares existing at batch start all receive same P&L", async () => {

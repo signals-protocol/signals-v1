@@ -6,7 +6,7 @@ import { WAD } from "../../helpers/constants";
 /**
  * VaultAccountingLib Unit Tests
  *
- * Reference: docs/vault-invariants.md, whitepaper Section 3
+ * Reference: docs/vault-invariants.md, whitepaper section 3
  *
  * Invariants:
  * - INV-V1: N^pre_t = N_{t-1} + L_t + F_t + G_t
@@ -93,9 +93,8 @@ describe("VaultAccountingLib", () => {
 
       // Per whitepaper: Safety Layer should prevent this via Backstop Grants
       // If it happens, revert rather than silently clamp
-      await expect(
-        lib.computePreBatch(navPrev, sharesPrev, pnl, 0n, 0n)
-      ).to.be.revertedWithCustomError(lib, "NAVUnderflow")
+      await expect(lib.computePreBatch(navPrev, sharesPrev, pnl, 0n, 0n))
+        .to.be.revertedWithCustomError(lib, "NAVUnderflow")
         .withArgs(navPrev, ethers.parseEther("200"));
     });
   });
@@ -214,7 +213,7 @@ describe("VaultAccountingLib", () => {
       // Price preservation: |newPrice - price| <= 1 wei
       const diff = newPrice > price ? newPrice - price : price - newPrice;
       expect(diff).to.be.lte(1n);
-      
+
       // Refund should be small (at most 1 wei per whitepaper)
       expect(refund).to.be.lte(1n);
     });
@@ -260,14 +259,14 @@ describe("VaultAccountingLib", () => {
       // S_mint = floor(100 / 1.4285...) = 70
       // A_used = 70 * 1.4285... = 99.999...
       // refund = 100 - A_used (small dust)
-      
+
       // Verify: newNav = nav + A_used (NOT nav + deposit)
       const amountUsed = (minted * price) / WAD;
       expect(newNav).to.equal(nav + amountUsed);
-      
+
       // Verify: refund = deposit - A_used
       expect(refund).to.equal(deposit - amountUsed);
-      
+
       // Verify: refund is at most 1 wei (per whitepaper)
       // Note: In WAD terms, this can be up to ~price wei
       expect(refund).to.be.lt(price);
@@ -565,17 +564,41 @@ describe("VaultAccountingLib", () => {
       const price = ethers.parseEther("1");
 
       // Multiple operations - note: applyDeposit now returns 4 values
-      let result = await lib.applyDeposit(nav, shares, price, ethers.parseEther("50"));
-      nav = result[0]; shares = result[1];
-      
-      result = await lib.applyDeposit(nav, shares, price, ethers.parseEther("30"));
-      nav = result[0]; shares = result[1];
-      
-      const wdResult = await lib.applyWithdraw(nav, shares, price, ethers.parseEther("20"));
-      nav = wdResult[0]; shares = wdResult[1];
-      
-      result = await lib.applyDeposit(nav, shares, price, ethers.parseEther("100"));
-      nav = result[0]; shares = result[1];
+      let result = await lib.applyDeposit(
+        nav,
+        shares,
+        price,
+        ethers.parseEther("50")
+      );
+      nav = result[0];
+      shares = result[1];
+
+      result = await lib.applyDeposit(
+        nav,
+        shares,
+        price,
+        ethers.parseEther("30")
+      );
+      nav = result[0];
+      shares = result[1];
+
+      const wdResult = await lib.applyWithdraw(
+        nav,
+        shares,
+        price,
+        ethers.parseEther("20")
+      );
+      nav = wdResult[0];
+      shares = wdResult[1];
+
+      result = await lib.applyDeposit(
+        nav,
+        shares,
+        price,
+        ethers.parseEther("100")
+      );
+      nav = result[0];
+      shares = result[1];
 
       // Final price should still be ~1.0
       const finalPrice = shares > 0n ? (nav * WAD) / shares : WAD;
@@ -595,13 +618,13 @@ describe("VaultAccountingLib", () => {
       const depositAmount = ethers.parseEther("120");
 
       // Order 1: withdraw first, then deposit
-      let [nav1, shares1, ] = await lib.applyWithdraw(
+      let [nav1, shares1] = await lib.applyWithdraw(
         initialNav,
         initialShares,
         batchPrice,
         withdrawShares
       );
-      let [finalNav1, finalShares1, , ] = await lib.applyDeposit(
+      let [finalNav1, finalShares1, ,] = await lib.applyDeposit(
         nav1,
         shares1,
         batchPrice,
@@ -609,13 +632,13 @@ describe("VaultAccountingLib", () => {
       );
 
       // Order 2: deposit first, then withdraw
-      let [nav2, shares2, , ] = await lib.applyDeposit(
+      let [nav2, shares2, ,] = await lib.applyDeposit(
         initialNav,
         initialShares,
         batchPrice,
         depositAmount
       );
-      let [finalNav2, finalShares2, ] = await lib.applyWithdraw(
+      let [finalNav2, finalShares2] = await lib.applyWithdraw(
         nav2,
         shares2,
         batchPrice,

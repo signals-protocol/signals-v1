@@ -306,7 +306,7 @@ describe("OracleModule", () => {
       expect(ts).to.equal(ts1);
     });
 
-    it("on tie: prefers earlier priceTimestamp (WP v2 tie-break)", async () => {
+    it("on tie: prefers earlier priceTimestamp", async () => {
       const { core, market, owner } = await setup();
       const tSet = Number(market.settlementTimestamp);
 
@@ -401,7 +401,7 @@ describe("OracleModule", () => {
       );
     });
 
-    it("allows markFailed during PendingOps even without candidate (WP v2)", async () => {
+    it("allows markFailed during PendingOps even without candidate", async () => {
       const { core, market, lifecycleImpl } = await setup();
       const tSet = Number(market.settlementTimestamp);
       const pendingOpsStart = tSet + 120;
@@ -444,7 +444,7 @@ describe("OracleModule", () => {
       expect(m.settlementValue).to.equal(2);
     });
 
-    it("markSettlementFailed clears candidate during PendingOps (WP v2 divergence)", async () => {
+    it("markSettlementFailed clears candidate during PendingOps", async () => {
       const { core, market, owner, oracleModule } = await setup();
       const tSet = Number(market.settlementTimestamp);
 

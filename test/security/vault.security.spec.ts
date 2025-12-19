@@ -233,7 +233,7 @@ describe("Vault Security", () => {
   // Deposit residual refund
   // ============================================================
   describe("Deposit residual refund", () => {
-    it("refunds deposit residual on claim (WP v2 Appendix C)", async () => {
+    it("refunds deposit residual on claim", async () => {
       const { proxy, userB, payment, firstBatchId } = await loadFixture(
         deploySeededVaultFixture
       );

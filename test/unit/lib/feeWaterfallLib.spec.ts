@@ -104,7 +104,7 @@ describe("FeeWaterfallLib", () => {
     });
   });
 
-  describe("INV-FW3: Grant Bound (WP v2 Safety Invariant)", () => {
+  describe("INV-FW3: Grant Bound (Safety Invariant)", () => {
     it("case 3: grant needed and deltaEt sufficient", async () => {
       // Loss that requires grant, with sufficient deltaEt
       const result = await calculate({
@@ -123,8 +123,8 @@ describe("FeeWaterfallLib", () => {
       expect(result.Bnext).to.be.lte(ethers.parseEther("200")); // Backstop decreased
     });
 
-    it("case 4: reverts when grant exceeds deltaEt (WP v2: drawdown floor invariant)", async () => {
-      // Per whitepaper v2: "if G^need_t > ΔE_t, batch must revert"
+    it("case 4: reverts when grant exceeds deltaEt (drawdown floor invariant)", async () => {
+      // Safety invariant: if G^need_t > ΔE_t, batch must revert
       await expect(
         calculate({
           Lt: ethers.parseEther("-500"),    // 500 loss
@@ -171,13 +171,13 @@ describe("FeeWaterfallLib", () => {
       // Nraw = 1000 - 400 + 50 = 650
       // Nfloor = 700
       // grantNeed = 50
-      // Per WP v2: Gt = grantNeed (no capping, revert if exceeds)
+      // Gt = grantNeed (no capping, revert if exceeds)
       expect(result.Gt).to.equal(ethers.parseEther("50"));
     });
 
-    it("reverts when grantNeed exceeds deltaEt (WP v2 invariant)", async () => {
-      // Per whitepaper v2: "if G^need_t > ΔE_t, batch must revert"
-      // This is the Safety Layer invariant - drawdown floor cannot be violated
+    it("reverts when grantNeed exceeds deltaEt (drawdown floor invariant)", async () => {
+      // If G^need_t > ΔE_t, batch must revert.
+      // This is the Safety Layer invariant - drawdown floor cannot be violated.
       await expect(
         calculate({
           Lt: ethers.parseEther("-500"),
@@ -252,7 +252,7 @@ describe("FeeWaterfallLib", () => {
     });
 
     it("Npre = Nprev + Lt + Ft + Gt for loss with grant", async () => {
-      // Use deltaEt that's sufficient for grantNeed (WP v2: revert if grantNeed > deltaEt)
+      // Use deltaEt that's sufficient for grantNeed (revert if grantNeed > deltaEt)
       const result = await calculate({
         Lt: ethers.parseEther("-400"),  // -400 loss
         Ftot: ethers.parseEther("50"),
@@ -333,7 +333,7 @@ describe("FeeWaterfallLib", () => {
     });
   });
 
-  describe("WP v2: Ceil Rounding for Nfloor (Safety Invariant)", () => {
+  describe("Ceil Rounding for Nfloor (Safety Invariant)", () => {
     it("uses wMulUp for Nfloor calculation (ceil semantics)", async () => {
       // Test case where wMul vs wMulUp makes a difference
       // Nprev = 1000000000000000000001 (1000e18 + 1 wei)
@@ -459,9 +459,9 @@ describe("FeeWaterfallLib", () => {
       expect(result.Floss + result.Fpool).to.equal(ethers.parseEther("80"));
     });
 
-    it("INV: Gt <= deltaEt (always true per WP v2 - reverts if exceeded)", async () => {
-      // WP v2: if grantNeed > deltaEt, batch reverts
-      // So for any successful call, Gt = grantNeed <= deltaEt
+    it("INV: Gt <= deltaEt (always true - reverts if exceeded)", async () => {
+      // If grantNeed > deltaEt, batch reverts.
+      // So for any successful call, Gt = grantNeed <= deltaEt.
       const result = await calculate({
         Lt: ethers.parseEther("-350"),  // Loss that results in grantNeed <= deltaEt
         Ftot: ethers.parseEther("50"),
@@ -528,7 +528,7 @@ describe("FeeWaterfallLib", () => {
     });
 
     it("matches JS reference for loss with grant case", async () => {
-      // Use parameters where grantNeed <= deltaEt (WP v2 requirement)
+      // Use parameters where grantNeed <= deltaEt
       // Lt = -400, Ftot = 50 => Nraw = 650, Nfloor = 700, grantNeed = 50
       const params = {
         Lt: ethers.parseEther("-400"),
@@ -563,7 +563,7 @@ describe("FeeWaterfallLib", () => {
       for (let i = 0; i < 10; i++) {
         const params = generateRandomParams();
         
-        // Skip cases that would revert (WP v2: grantNeed > deltaEt reverts)
+        // Skip cases that would revert (grantNeed > deltaEt reverts)
         if (params.Lt < 0n) {
           const Lneg = -params.Lt;
           const Floss = Lneg < params.Ftot ? Lneg : params.Ftot;
@@ -571,7 +571,7 @@ describe("FeeWaterfallLib", () => {
           const wadPlusPdd = 10n ** 18n + params.pdd;
           const Nfloor = wadPlusPdd > 0n ? (params.Nprev * wadPlusPdd) / (10n ** 18n) : 0n;
           const grantNeed = Nfloor > Nraw ? Nfloor - Nraw : 0n;
-          // WP v2: grantNeed > deltaEt causes revert (no capping)
+          // grantNeed > deltaEt causes revert (no capping)
           if (grantNeed > params.deltaEt) continue;
           // Also skip if grant exceeds backstop
           if (grantNeed > params.Bprev) continue;
@@ -606,7 +606,7 @@ describe("FeeWaterfallLib", () => {
       while (validCases < targetCases) {
         const params = generateRandomParams();
 
-        // Skip cases that would revert (WP v2 rules)
+        // Skip cases that would revert
         if (params.Lt < 0n) {
           const Lneg = -params.Lt;
           const Floss = Lneg < params.Ftot ? Lneg : params.Ftot;
@@ -616,7 +616,7 @@ describe("FeeWaterfallLib", () => {
           const wadPlusPdd = WAD + params.pdd;
           const Nfloor = wadPlusPdd > 0n ? (params.Nprev * wadPlusPdd) / WAD : 0n;
           const grantNeed = Nfloor > Nraw ? Nfloor - Nraw : 0n;
-          // WP v2: grantNeed > deltaEt causes revert (drawdown floor invariant)
+          // grantNeed > deltaEt causes revert (drawdown floor invariant)
           if (grantNeed > params.deltaEt) continue;
           // Also skip if grant exceeds backstop
           if (grantNeed > params.Bprev) continue;

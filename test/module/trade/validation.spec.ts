@@ -25,8 +25,8 @@ type MarketStruct = {
   feePolicy: string;
   initialRootSum: bigint;
   accumulatedFees: bigint;
-  minFactor: bigint; // Phase 7
-  deltaEt: bigint; // Phase 7
+  minFactor: bigint;
+  deltaEt: bigint;
 };
 
 function buildMarket(
@@ -55,13 +55,13 @@ function buildMarket(
     feePolicy: ethers.ZeroAddress,
     initialRootSum: BigInt(numBins) * ethers.parseEther("1"),
     accumulatedFees: 0n,
-    minFactor: WAD, // Phase 7: uniform prior
-    deltaEt: 0n, // Phase 7: uniform prior → ΔEₜ = 0
+    minFactor: WAD, // uniform prior
+    deltaEt: 0n, // uniform prior → ΔEₜ = 0
   };
   return { ...market, ...overrides };
 }
 
-describe("TradeModule validation helpers (Phase 3-1)", () => {
+describe("TradeModule validation helpers", () => {
   async function deployHarness() {
     const lazyLib = await (
       await ethers.getContractFactory("LazyMulSegmentTree")

@@ -6,10 +6,10 @@ import { SignalsCoreHarness, RiskModule, MockERC20 } from '../../../typechain-ty
 
 /**
  * Core-first Risk Gate Call Order Tests
- * 
- * Phase 8: Verifies that SignalsCore calls RiskModule gates BEFORE
+ *
+ * Verifies that SignalsCore calls RiskModule gates BEFORE
  * delegating to target modules. This is structural enforcement.
- * 
+ *
  * Strategy: Use mock modules that revert with identifiable messages
  * to prove call order.
  */
@@ -201,13 +201,13 @@ describe('Core-first Risk Gate Call Order', () => {
     });
 
     it('calls gateOpenPosition before TradeModule', async () => {
-      // Phase 9 deferred: gateOpenPosition is no-op
+      // gateOpenPosition is currently a no-op (exposure cap enforcement deferred)
       // This test just verifies the gate is called (no revert from gate = pass)
-      
+
       const quantity = 100n;
       const maxCost = ethers.parseEther('1000');
-      
-      // Should succeed because gate is no-op in Phase 8
+
+      // Should succeed because gate is no-op
       // If gate wasn't called, delegatecall would fail differently
       await expect(core.openPosition(
         marketId,
@@ -215,7 +215,7 @@ describe('Core-first Risk Gate Call Order', () => {
         50, // upperTick
         quantity,
         maxCost
-      )).to.not.be.revertedWithCustomError(riskModule, 'PerTicketCapExceeded');
+      )).to.not.be.revertedWithCustomError(core, 'PerTicketCapExceeded');
     });
   });
 

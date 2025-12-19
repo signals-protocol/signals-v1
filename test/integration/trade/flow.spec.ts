@@ -97,7 +97,7 @@ describe("TradeModule flow (minimal parity)", () => {
       feePolicy: ethers.ZeroAddress,
       initialRootSum: 4n * WAD,
       accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
       ...marketOverrides,
     };
@@ -178,8 +178,8 @@ describe("TradeModule flow (minimal parity)", () => {
     const quote = await core.calculateOpenCost.staticCall(1, 0, 4, 1_000);
     await core.connect(user).openPosition(1, 0, 4, 1_000, quote);
 
-    // mark market settled in the past to satisfy claim gate
-    // Phase 6: settlementFinalizedAt must be set to past time for claim to be allowed
+    // Mark market settled in the past to satisfy claim gate.
+    // settlementFinalizedAt must be set to past time for claim to be allowed.
     const m = await core.markets(1);
     const past = m.endTimestamp - 1000n;
     const settledMarket: ISignalsCore.MarketStruct = {
@@ -193,7 +193,7 @@ describe("TradeModule flow (minimal parity)", () => {
       startTimestamp: m.startTimestamp,
       endTimestamp: past,
       settlementTimestamp: past,
-      settlementFinalizedAt: past, // Phase 6: Set to past so claim gating passes
+      settlementFinalizedAt: past, // Set to past so claim gating passes
       minTick: m.minTick,
       maxTick: m.maxTick,
       tickSpacing: m.tickSpacing,
@@ -203,8 +203,8 @@ describe("TradeModule flow (minimal parity)", () => {
       feePolicy: m.feePolicy,
       initialRootSum: m.initialRootSum,
       accumulatedFees: m.accumulatedFees,
-      minFactor: m.minFactor, // Phase 7
-      deltaEt: m.deltaEt, // Phase 7
+      minFactor: m.minFactor,
+      deltaEt: m.deltaEt,
     };
     await core.setMarket(1, settledMarket);
 
@@ -227,8 +227,8 @@ describe("TradeModule flow (minimal parity)", () => {
     // not settled yet
     await expect(core.connect(user).claimPayout(1)).to.be.reverted;
 
-    // settle but too early for claim window
-    // Phase 6: Claim gating is time-based (settlementFinalizedAt + Δ_claim)
+    // Settle but too early for claim window.
+    // Claim gating is time-based (settlementFinalizedAt + Δ_claim).
     const currentTime = BigInt(await ethers.provider.getBlock("latest").then(b => b!.timestamp));
     const m = await core.markets(1);
     const earlySettleMarket: ISignalsCore.MarketStruct = {
@@ -252,14 +252,14 @@ describe("TradeModule flow (minimal parity)", () => {
       feePolicy: m.feePolicy,
       initialRootSum: m.initialRootSum,
       accumulatedFees: m.accumulatedFees,
-      minFactor: m.minFactor, // Phase 7
-      deltaEt: m.deltaEt, // Phase 7
+      minFactor: m.minFactor,
+      deltaEt: m.deltaEt,
     };
     await core.setMarket(1, earlySettleMarket);
     await expect(core.connect(user).claimPayout(1)).to.be.reverted;
 
-    // allow claim by moving settlementFinalizedAt to past
-    // Phase 6: claim gating is time-based (settlementFinalizedAt + Δ_claim)
+    // Allow claim by moving settlementFinalizedAt to past.
+    // Claim gating is time-based (settlementFinalizedAt + Δ_claim).
     const m2 = await core.markets(1);
     const pastTime = m2.endTimestamp - 1000n;
     const claimableMarket: ISignalsCore.MarketStruct = {
@@ -273,7 +273,7 @@ describe("TradeModule flow (minimal parity)", () => {
       startTimestamp: m2.startTimestamp,
       endTimestamp: m2.endTimestamp,
       settlementTimestamp: pastTime,
-      settlementFinalizedAt: pastTime, // Phase 6: Must be in past for claim to succeed
+      settlementFinalizedAt: pastTime, // Must be in past for claim to succeed
       minTick: m2.minTick,
       maxTick: m2.maxTick,
       tickSpacing: m2.tickSpacing,
@@ -320,8 +320,8 @@ describe("TradeModule flow (minimal parity)", () => {
       feePolicy: await feePolicy.getAddress(),
       initialRootSum: m.initialRootSum,
       accumulatedFees: m.accumulatedFees,
-      minFactor: m.minFactor, // Phase 7
-      deltaEt: m.deltaEt, // Phase 7
+      minFactor: m.minFactor,
+      deltaEt: m.deltaEt,
     };
     await core.setMarket(1, feeMarket);
     await expect(
@@ -335,8 +335,8 @@ describe("TradeModule flow (minimal parity)", () => {
       core.connect(user).decreasePosition(1, 500, quote)
     ).to.be.revertedWithCustomError(tradeModule, "ProceedsBelowMinimum");
 
-    // Phase 6 (WP v1.0): Fee NOT transferred to feeRecipient during trade
-    // Fee accumulates in core for Waterfall distribution after settlement
+    // Fee NOT transferred to feeRecipient during trade.
+    // Fee accumulates in core for Waterfall distribution after settlement.
     const feeRecipient = await core.feeRecipient();
     const feeBefore = await payment.balanceOf(feeRecipient);
     await core.connect(user).closePosition(1, 0);

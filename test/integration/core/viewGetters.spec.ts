@@ -6,7 +6,7 @@ import { SignalsCoreHarness } from "../../../typechain-types";
 /**
  * Core View Getters Tests
  *
- * Phase 10: Tests for FE-facing view functions
+ * Tests for FE-facing view functions.
  */
 describe("Core View Getters", () => {
   let owner: Signer;

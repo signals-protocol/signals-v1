@@ -1,7 +1,7 @@
 /**
  * Fee Waterfall Reference Implementation (TypeScript)
  *
- * Pure TypeScript implementation of whitepaper Sec 4.3-4.6
+ * Pure TypeScript implementation of whitepaper sections 4.3-4.6.
  * Used to verify on-chain FeeWaterfallLib matches expected behavior.
  */
 
@@ -43,8 +43,8 @@ function wMul(a: bigint, b: bigint): bigint {
 
 /**
  * WAD multiply with round-up (ceil)
- * Per whitepaper v2: ceil semantics required for Nfloor calculation
- * to ensure grantNeed is never under-estimated (drawdown floor is invariant)
+ * Ceil semantics are required for Nfloor calculation
+ * to ensure grantNeed is never under-estimated (drawdown floor is invariant).
  */
 function wMulUp(a: bigint, b: bigint): bigint {
   const product = a * b;
@@ -92,9 +92,9 @@ export function calculateFeeWaterfall(
   // ========================================
   // Step 2: Drawdown Floor & Grant
   // ========================================
-  // Per whitepaper v2: "G^need_t := max{0, ⌈G^min_t⌉}" requires ceil semantics
-  // We use wMulUp for Nfloor to ensure conservative (higher) floor calculation
-  // This guarantees grantNeed is never under-estimated (drawdown floor is invariant)
+  // G^need_t := max{0, ⌈G^min_t⌉} requires ceil semantics.
+  // We use wMulUp for Nfloor to ensure conservative (higher) floor calculation.
+  // This guarantees grantNeed is never under-estimated (drawdown floor is invariant).
   let Nfloor: bigint;
   if (p.Nprev > 0n) {
     const wadPlusPdd = WAD + p.pdd;
@@ -106,7 +106,7 @@ export function calculateFeeWaterfall(
 
   const grantNeed = Nfloor > Nraw ? Nfloor - Nraw : 0n;
 
-  // WP v2: if grantNeed > deltaEt, batch must revert (drawdown floor invariant)
+  // If grantNeed > deltaEt, batch must revert (drawdown floor invariant).
   if (grantNeed > p.deltaEt) {
     throw new Error(
       `GrantExceedsTailBudget: grantNeed=${grantNeed}, deltaEt=${p.deltaEt}`

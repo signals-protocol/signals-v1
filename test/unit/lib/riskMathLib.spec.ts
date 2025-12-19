@@ -4,7 +4,7 @@ import { RiskModule } from '../../../typechain-types';
 
 /**
  * RiskMathLib Unit Tests
- * Tests core risk calculations per WP v2 Sec 4.1-4.5
+ * Tests core risk calculations per whitepaper sections 4.1-4.5
  */
 describe('RiskMathLib', () => {
   // We test RiskMathLib through RiskModule since library functions are internal

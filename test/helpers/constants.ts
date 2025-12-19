@@ -38,8 +38,8 @@ export const ONE_DAY = 86400;
 export const ONE_HOUR = 3600;
 export const BATCH_SECONDS = 86400n; // 1 day
 
-// Phase 7: Create uniform prior factors (all 1 WAD)
-// Use this for createMarket calls to get ΔEₜ = 0
+// Creates uniform prior factors (all 1 WAD).
+// Use this for createMarket calls to get ΔEₜ = 0.
 export function uniformFactors(numBins: number): bigint[] {
   return Array(numBins).fill(WAD);
 }

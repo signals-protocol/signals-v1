@@ -115,7 +115,7 @@ describe("Boundaries", () => {
       feePolicy: ethers.ZeroAddress,
       initialRootSum: BigInt(NUM_BINS) * WAD,
       accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
     };
     await core.setMarket(MARKET_ID, market);
@@ -418,7 +418,7 @@ describe("Boundaries", () => {
         feePolicy: ethers.ZeroAddress,
         initialRootSum: 10n * WAD,
         accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
       };
       await core.setMarket(2, market);
@@ -462,7 +462,7 @@ describe("Boundaries", () => {
         feePolicy: ethers.ZeroAddress,
         initialRootSum: 10n * WAD,
         accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
       };
       await core.setMarket(3, market);
@@ -506,7 +506,7 @@ describe("Boundaries", () => {
         feePolicy: ethers.ZeroAddress,
         initialRootSum: 10n * WAD,
         accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
       };
       await core.setMarket(4, market);
@@ -601,7 +601,7 @@ describe("Boundaries", () => {
         feePolicy: ethers.ZeroAddress,
         initialRootSum: 10n * WAD,
         accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
       };
       await core.setMarket(5, market);
@@ -645,7 +645,7 @@ describe("Boundaries", () => {
         feePolicy: ethers.ZeroAddress,
         initialRootSum: 10n * WAD,
         accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
       };
       await core.setMarket(6, market);

@@ -1,35 +1,35 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { 
-  SignalsCoreHarness, 
-  MockPaymentToken, 
-  MockSignalsPosition, 
-  RiskModule
+import {
+  SignalsCoreHarness,
+  MockPaymentToken,
+  MockSignalsPosition,
+  RiskModule,
 } from "../../../typechain-types";
 
 /**
- * Phase 7: RiskModule Tests (TDD)
- * 
- * Test Plan (per whitepaper v2):
- * 1. ΔEₜ Calculation (Sec 4.1)
+ * RiskModule Tests (TDD)
+ *
+ * Test Plan:
+ * 1. ΔEₜ Calculation
  *    - Uniform prior: ΔEₜ = 0
  *    - Concentrated prior: ΔEₜ > 0
- * 
- * 2. α Safety Bounds (Sec 4.3-4.5)
+ *
+ * 2. α Safety Bounds
  *    - αbase,t = λ * E_t / ln(n)
  *    - αlimit,t = max{0, αbase,t * (1 - k * DD_t)}
- * 
- * 3. Prior Admissibility (Sec 4.1)
+ *
+ * 3. Prior Admissibility
  *    - ΔEₜ ≤ B^eff_{t-1} or revert
- * 
- * 4. Trade α Enforcement (Sec 4.5)
+ *
+ * 4. Trade α Enforcement
  *    - Market α ≤ αlimit or revert on create/increase
  *    - close/decrease always allowed
  */
 
 const WAD = ethers.parseEther("1");
 const LAMBDA = ethers.parseEther("0.3"); // 30% max drawdown (pdd = -λ)
-const K_DD = ethers.parseEther("1");     // Drawdown sensitivity factor
+const K_DD = ethers.parseEther("1"); // Drawdown sensitivity factor
 
 describe("RiskModule", () => {
   let core: SignalsCoreHarness;
@@ -42,9 +42,15 @@ describe("RiskModule", () => {
     const [_owner] = await ethers.getSigners();
     owner = _owner;
 
-    payment = await (await ethers.getContractFactory("MockPaymentToken")).deploy();
-    position = await (await ethers.getContractFactory("MockSignalsPosition")).deploy();
-    const lazyLib = await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy();
+    payment = await (
+      await ethers.getContractFactory("MockPaymentToken")
+    ).deploy();
+    position = await (
+      await ethers.getContractFactory("MockSignalsPosition")
+    ).deploy();
+    const lazyLib = await (
+      await ethers.getContractFactory("LazyMulSegmentTree")
+    ).deploy();
 
     // Deploy RiskModule
     riskModule = await (await ethers.getContractFactory("RiskModule")).deploy();
@@ -60,14 +66,16 @@ describe("RiskModule", () => {
       payment.target,
       position.target,
       120, // settlementSubmitWindow
-      60,  // settlementFinalizeDeadline
+      60, // settlementFinalizeDeadline
     ]);
 
-    const proxy = await (await ethers.getContractFactory("TestERC1967Proxy")).deploy(
-      coreImpl.target,
-      initData
-    );
-    core = (await ethers.getContractAt("SignalsCoreHarness", proxy.target)) as SignalsCoreHarness;
+    const proxy = await (
+      await ethers.getContractFactory("TestERC1967Proxy")
+    ).deploy(coreImpl.target, initData);
+    core = (await ethers.getContractAt(
+      "SignalsCoreHarness",
+      proxy.target
+    )) as SignalsCoreHarness;
 
     // Deploy other modules
     const lifecycleImpl = await (
@@ -101,10 +109,10 @@ describe("RiskModule", () => {
     await core.setMinSeedAmount(ethers.parseUnits("100", 6));
     // pdd is set via setRiskConfig (pdd := -λ)
     await core.setFeeWaterfallConfig(
-      ethers.parseEther("0.2"),  // rhoBS = 20%
-      ethers.parseEther("0.7"),  // phiLP = 70%
-      ethers.parseEther("0.2"),  // phiBS = 20%
-      ethers.parseEther("0.1")   // phiTR = 10%
+      ethers.parseEther("0.2"), // rhoBS = 20%
+      ethers.parseEther("0.7"), // phiLP = 70%
+      ethers.parseEther("0.2"), // phiBS = 20%
+      ethers.parseEther("0.1") // phiTR = 10%
     );
 
     // Seed vault for testing
@@ -115,7 +123,7 @@ describe("RiskModule", () => {
     // Setup Backstop and Treasury NAV for testing
     await core.setCapitalStack(
       ethers.parseEther("2000"), // backstopNav = 2000
-      ethers.parseEther("500")  // treasuryNav = 500
+      ethers.parseEther("500") // treasuryNav = 500
     );
   }
 
@@ -145,7 +153,7 @@ describe("RiskModule", () => {
       // For n=75, should use exact PRBMath ln(75) + 1 wei
       const ln75 = await riskModule.lnWad(75n);
       const ln100 = await riskModule.lnWad(100n);
-      
+
       // ln(75) ≈ 4.317... < ln(100) ≈ 4.605...
       // PRBMath gives exact values, not bucketed
       expect(ln75).to.be.lt(ln100);
@@ -154,17 +162,21 @@ describe("RiskModule", () => {
     it("+1 wei ensures conservative (smaller) αbase", async () => {
       const Et = ethers.parseEther("10000");
       const numBins = 75n;
-      
+
       // αbase = λ * Et / ln(n)
       // +1 wei to ln → slightly smaller αbase → conservative
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
-      
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
+
       // Exact ln(75) ≈ 4.317 WAD (PRBMath)
       // Used ln(75) + 1 wei (conservative)
-      
+
       const lnUsed = await riskModule.lnWad(numBins);
       const expectedAlphaBase = (LAMBDA * Et) / lnUsed;
-      
+
       expect(alphaBase).to.equal(expectedAlphaBase);
       // αbase is conservative due to +1 wei in denominator
       const exactLn75 = ethers.parseEther("4.317488"); // Approximate
@@ -192,13 +204,13 @@ describe("RiskModule", () => {
       // For uniform prior q₀ = 0, E_ent = α ln n, so ΔEₜ = 0
       const numBins = 100n;
       const alpha = ethers.parseEther("1000"); // α
-      
+
       const deltaEt = await riskModule.calculateDeltaEt(
         alpha,
         numBins,
         0n // uniform prior weight (no concentration)
       );
-      
+
       expect(deltaEt).to.equal(0n);
     });
 
@@ -207,23 +219,31 @@ describe("RiskModule", () => {
       const numBins = 100n;
       const alpha = ethers.parseEther("1000");
       const priorConcentration = ethers.parseEther("0.5"); // Concentrated prior
-      
+
       const deltaEt = await riskModule.calculateDeltaEt(
         alpha,
         numBins,
         priorConcentration
       );
-      
+
       expect(deltaEt).to.be.gt(0n);
     });
 
     it("ΔEₜ scales with prior concentration", async () => {
       const numBins = 100n;
       const alpha = ethers.parseEther("1000");
-      
-      const deltaEt1 = await riskModule.calculateDeltaEt(alpha, numBins, ethers.parseEther("0.1"));
-      const deltaEt2 = await riskModule.calculateDeltaEt(alpha, numBins, ethers.parseEther("0.5"));
-      
+
+      const deltaEt1 = await riskModule.calculateDeltaEt(
+        alpha,
+        numBins,
+        ethers.parseEther("0.1")
+      );
+      const deltaEt2 = await riskModule.calculateDeltaEt(
+        alpha,
+        numBins,
+        ethers.parseEther("0.5")
+      );
+
       // More concentrated prior → higher tail risk → higher ΔEₜ
       expect(deltaEt2).to.be.gt(deltaEt1);
     });
@@ -236,25 +256,40 @@ describe("RiskModule", () => {
     it("calculates αbase = λ * E_t / ln(n)", async () => {
       const Et = ethers.parseEther("10000"); // E_t = NAV_{t-1}
       const numBins = 100n;
-      
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
-      
+
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
+
       // αbase = λ * E_t / ln(n) = 0.3 * 10000 / ln(100) = 3000 / 4.605 ≈ 651.5
       // ln(100) ≈ 4.605 * WAD
       const lnN = await riskModule.lnWad(numBins);
       const expectedAlphaBase = (LAMBDA * Et) / lnN;
-      
-      expect(alphaBase).to.be.closeTo(expectedAlphaBase, ethers.parseEther("1"));
+
+      expect(alphaBase).to.be.closeTo(
+        expectedAlphaBase,
+        ethers.parseEther("1")
+      );
     });
 
     it("αlimit = αbase when drawdown is zero", async () => {
       const Et = ethers.parseEther("10000");
       const numBins = 100n;
       const drawdown = 0n; // No drawdown
-      
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
-      const alphaLimit = await riskModule.calculateAlphaLimit(alphaBase, drawdown, K_DD);
-      
+
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
+      const alphaLimit = await riskModule.calculateAlphaLimit(
+        alphaBase,
+        drawdown,
+        K_DD
+      );
+
       expect(alphaLimit).to.equal(alphaBase);
     });
 
@@ -262,13 +297,21 @@ describe("RiskModule", () => {
       const Et = ethers.parseEther("10000");
       const numBins = 100n;
       const drawdown = ethers.parseEther("0.2"); // 20% drawdown
-      
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
-      const alphaLimit = await riskModule.calculateAlphaLimit(alphaBase, drawdown, K_DD);
-      
+
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
+      const alphaLimit = await riskModule.calculateAlphaLimit(
+        alphaBase,
+        drawdown,
+        K_DD
+      );
+
       // αlimit = αbase * (1 - k * DD) = αbase * 0.8
       const expectedLimit = (alphaBase * (WAD - drawdown)) / WAD;
-      
+
       expect(alphaLimit).to.equal(expectedLimit);
     });
 
@@ -276,10 +319,18 @@ describe("RiskModule", () => {
       const Et = ethers.parseEther("10000");
       const numBins = 100n;
       const drawdown = WAD; // 100% drawdown
-      
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
-      const alphaLimit = await riskModule.calculateAlphaLimit(alphaBase, drawdown, K_DD);
-      
+
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
+      const alphaLimit = await riskModule.calculateAlphaLimit(
+        alphaBase,
+        drawdown,
+        K_DD
+      );
+
       expect(alphaLimit).to.equal(0n);
     });
 
@@ -287,10 +338,18 @@ describe("RiskModule", () => {
       const Et = ethers.parseEther("10000");
       const numBins = 100n;
       const drawdown = ethers.parseEther("1.5"); // 150% drawdown (impossible but test edge)
-      
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
-      const alphaLimit = await riskModule.calculateAlphaLimit(alphaBase, drawdown, K_DD);
-      
+
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
+      const alphaLimit = await riskModule.calculateAlphaLimit(
+        alphaBase,
+        drawdown,
+        K_DD
+      );
+
       expect(alphaLimit).to.equal(0n); // max(0, negative) = 0
     });
   });
@@ -302,7 +361,7 @@ describe("RiskModule", () => {
     it("accepts prior when ΔEₜ ≤ B^eff", async () => {
       const deltaEt = ethers.parseEther("100");
       const effectiveBackstop = ethers.parseEther("200");
-      
+
       // Should not revert
       await expect(
         riskModule.checkPriorAdmissibility(deltaEt, effectiveBackstop)
@@ -312,7 +371,7 @@ describe("RiskModule", () => {
     it("rejects prior when ΔEₜ > B^eff", async () => {
       const deltaEt = ethers.parseEther("300");
       const effectiveBackstop = ethers.parseEther("200");
-      
+
       await expect(
         riskModule.checkPriorAdmissibility(deltaEt, effectiveBackstop)
       ).to.be.revertedWithCustomError(riskModule, "PriorNotAdmissible");
@@ -320,9 +379,9 @@ describe("RiskModule", () => {
   });
 
   // ============================================================
-  // 7-2: Trade α Enforcement - Design Decision
+  // Trade α Enforcement - Design Decision
   // ============================================================
-  // WP v2 Design: "No per-trade α gate"
+  // "No per-trade α gate"
   // - α is enforced ONLY at market creation (createMarket) and reopen (reopenMarket)
   // - Trading is free within the α/prior set at Zero-Hour
   // - RiskModule provides CALCULATION helpers, enforcement is in MarketLifecycleModule
@@ -338,11 +397,23 @@ describe("RiskModule", () => {
     describe("Drawdown triggers α limit reduction", () => {
       it("reduces αlimit proportionally to drawdown", async () => {
         const alphaBase = ethers.parseEther("1000");
-        
-        const limit0 = await riskModule.calculateAlphaLimit(alphaBase, 0n, K_DD);
-        const limit10 = await riskModule.calculateAlphaLimit(alphaBase, ethers.parseEther("0.1"), K_DD);
-        const limit50 = await riskModule.calculateAlphaLimit(alphaBase, ethers.parseEther("0.5"), K_DD);
-        
+
+        const limit0 = await riskModule.calculateAlphaLimit(
+          alphaBase,
+          0n,
+          K_DD
+        );
+        const limit10 = await riskModule.calculateAlphaLimit(
+          alphaBase,
+          ethers.parseEther("0.1"),
+          K_DD
+        );
+        const limit50 = await riskModule.calculateAlphaLimit(
+          alphaBase,
+          ethers.parseEther("0.5"),
+          K_DD
+        );
+
         expect(limit0).to.equal(alphaBase);
         expect(limit10).to.equal((alphaBase * 9n) / 10n);
         expect(limit50).to.equal((alphaBase * 5n) / 10n);
@@ -352,21 +423,21 @@ describe("RiskModule", () => {
     describe("Recovery (α limit increases)", () => {
       it("αlimit increases as drawdown recovers", async () => {
         const alphaBase = ethers.parseEther("1000");
-        
+
         // Start at 50% drawdown
         const limitDrawdown = await riskModule.calculateAlphaLimit(
-          alphaBase, 
-          ethers.parseEther("0.5"), 
+          alphaBase,
+          ethers.parseEther("0.5"),
           K_DD
         );
-        
+
         // Recover to 20% drawdown
         const limitRecovered = await riskModule.calculateAlphaLimit(
-          alphaBase, 
-          ethers.parseEther("0.2"), 
+          alphaBase,
+          ethers.parseEther("0.2"),
           K_DD
         );
-        
+
         expect(limitRecovered).to.be.gt(limitDrawdown);
       });
     });
@@ -375,13 +446,13 @@ describe("RiskModule", () => {
       it("αlimit = 0 prevents all new market creation", async () => {
         const alphaBase = ethers.parseEther("1000");
         const extremeDrawdown = WAD; // 100%
-        
+
         const alphaLimit = await riskModule.calculateAlphaLimit(
-          alphaBase, 
-          extremeDrawdown, 
+          alphaBase,
+          extremeDrawdown,
           K_DD
         );
-        
+
         expect(alphaLimit).to.equal(0n);
         // Any α > 0 will exceed limit → market creation should fail
       });
@@ -389,7 +460,7 @@ describe("RiskModule", () => {
   });
 
   // ==================================================================
-  // Config Validation (Phase 7)
+  // Config Validation
   // ==================================================================
   describe("Config Validation", () => {
     describe("setRiskConfig validation", () => {
@@ -412,21 +483,17 @@ describe("RiskModule", () => {
       });
 
       it("accepts λ just below 1 (WAD - 1)", async () => {
-        await expect(
-          core.setRiskConfig(WAD - 1n, K_DD, false)
-        ).to.not.be.reverted;
+        await expect(core.setRiskConfig(WAD - 1n, K_DD, false)).to.not.be
+          .reverted;
       });
 
       it("accepts λ just above 0 (1 wei)", async () => {
-        await expect(
-          core.setRiskConfig(1n, K_DD, false)
-        ).to.not.be.reverted;
+        await expect(core.setRiskConfig(1n, K_DD, false)).to.not.be.reverted;
       });
 
       it("accepts typical λ = 0.3 (30%)", async () => {
-        await expect(
-          core.setRiskConfig(ethers.parseEther("0.3"), K_DD, true)
-        ).to.not.be.reverted;
+        await expect(core.setRiskConfig(ethers.parseEther("0.3"), K_DD, true))
+          .to.not.be.reverted;
       });
 
       it("sets pdd := -λ automatically", async () => {
@@ -491,4 +558,3 @@ describe("RiskModule", () => {
     });
   });
 });
-

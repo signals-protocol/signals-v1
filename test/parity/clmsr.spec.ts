@@ -41,7 +41,7 @@ function wadExp(x: number): bigint {
   return ethers.parseUnits(val.toString(), 18);
 }
 
-describe("CLMSR SDK parity and invariants (Phase 3-0 harness)", () => {
+describe("CLMSR SDK parity and invariants", () => {
   const alpha = WAD; // 1.0
   const loBin = 0;
   const hiBin = 3; // 4 bins total

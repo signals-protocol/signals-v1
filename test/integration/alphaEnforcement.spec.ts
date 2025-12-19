@@ -10,7 +10,7 @@ import {
 } from "../../typechain-types";
 
 /**
- * Phase 7 Integration Test: α Safety Bound Enforcement
+ * α Safety Bound Enforcement Integration Test
  *
  * Tests α enforcement at market creation time:
  * 1. createMarket with α > αlimit → revert
@@ -663,7 +663,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
   });
 
   // ==================================================================
-  // Phase 7.5: ΔEₜ Calculation & Prior Admissibility Tests
+  // ΔEₜ Calculation & Prior Admissibility Tests
   // ==================================================================
   describe("ΔEₜ Calculation (baseFactors → tail budget)", () => {
     it("uniform prior (all factors = WAD) → ΔEₜ = 0", async () => {
@@ -791,9 +791,9 @@ describe("α Safety Bound Enforcement (Integration)", () => {
   // Prior Admissibility tests are in the earlier "Prior Admissibility (ΔEₜ ≤ backstopNav)" section.
 
   // ==================================================================
-  // One Market Per Batch Invariant (WP v2)
+  // One Market Per Batch Invariant
   // ==================================================================
-  describe("One Market Per Batch (WP v2 invariant)", () => {
+  describe("One Market Per Batch Invariant", () => {
     it("allows first market creation for a batch", async () => {
       const now = await time.latest();
       const WAD = ethers.parseEther("1");
@@ -905,7 +905,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
   });
 
   // ==================================================================
-  // Phase 7.5: reopenMarket α/prior Enforcement
+  // reopenMarket α/prior Enforcement
   // ==================================================================
   describe("reopenMarket α/prior Enforcement", () => {
     it("reopenMarket succeeds when α ≤ αlimit", async () => {

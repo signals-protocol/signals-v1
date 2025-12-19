@@ -156,10 +156,10 @@ export async function deployTradeModuleSystem(
       settlementValue: 0,
       liquidityParameter: config.liquidityParameter ?? WAD,
       feePolicy: ethers.ZeroAddress,
-      // Phase 6: P&L tracking fields
+      // P&L tracking fields
       initialRootSum: BigInt(config.numBins) * WAD, // n * WAD for uniform prior
       accumulatedFees: 0n,
-      // Phase 7: Prior-based ΔEₜ calculation
+      // Prior-based ΔEₜ calculation
       minFactor: WAD, // Uniform prior: minFactor = 1 WAD
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
     };

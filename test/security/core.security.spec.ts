@@ -96,7 +96,7 @@ describe("Core Security", () => {
       feePolicy: feePolicy.target,
       initialRootSum: 100n * WAD,
       accumulatedFees: 0n,
-      minFactor: WAD, // Phase 7: uniform prior
+      minFactor: WAD, // uniform prior
       deltaEt: 0n, // Uniform prior: ΔEₜ = 0
     };
     await core.setMarket(1, market);

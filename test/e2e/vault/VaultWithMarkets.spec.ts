@@ -35,7 +35,7 @@ describe("VaultWithMarkets E2E", () => {
   async function deploySystem() {
     const [owner, seeder] = await ethers.getSigners();
 
-    // Use 6-decimal token as per WP v2 Sec 6.2 (paymentToken = USDC6)
+    // Use 6-decimal token (paymentToken = USDC6)
     const MockERC20Factory = await ethers.getContractFactory("MockERC20");
     const payment = (await MockERC20Factory.deploy(
       "MockVaultToken",
@@ -215,7 +215,7 @@ describe("VaultWithMarkets E2E", () => {
   });
 
   // ==================================================================
-  // ΔEₜ Grant Cap Wiring (Phase 7)
+  // ΔEₜ Grant Cap Wiring
   // Tests: prior → settle → batch → waterfall
   // ==================================================================
   describe("ΔEₜ Grant Cap Wiring", () => {

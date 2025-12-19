@@ -1,7 +1,7 @@
 /**
- * PayoutReserve Spec Tests (Phase 6 TDD)
+ * PayoutReserve Spec Tests
  *
- * Whitepaper v2 Section 3.5 requirements:
+ * Whitepaper v2 section 3.5 requirements:
  * - Payout reserve is deducted from NAV at settlement/batch time
  * - claimPayout() does NOT change NAV/Price after batch processing
  * - claimPayout() is gated: must wait until batch is processed
@@ -45,16 +45,16 @@ function tickToHumanPrice(tick: bigint): number {
   return Number(tick);
 }
 
-// Phase 6: Helper for 6-decimal token amounts
+// Helper for 6-decimal token amounts.
 function usdc(amount: string | number): bigint {
   return ethers.parseUnits(String(amount), 6);
 }
 
-describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
+describe("PayoutReserve Spec Tests", () => {
   async function deployFullSystem() {
     const [owner, seeder, trader] = await ethers.getSigners();
 
-    // Phase 6: Use 6-decimal token as per WP v2 Sec 6.2 (paymentToken = USDC6)
+    // Use 6-decimal token (paymentToken = USDC6)
     const MockERC20Factory = await ethers.getContractFactory("MockERC20");
     const payment = (await MockERC20Factory.deploy(
       "MockVaultToken",
@@ -229,7 +229,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
   // ================================================================
   // SPEC-1: Claim Gating is TIME-BASED, NOT BATCH-BASED
-  // (WP v1.0: claim is allowed after settlementFinalizedAt + Δ_claim)
+  // Claim is allowed after settlementFinalizedAt + Δ_claim.
   // Batch processing status is IRRELEVANT to claim eligibility.
   // NAV is unaffected because payout was already escrowed at settlement.
   // ================================================================
@@ -253,7 +253,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
         positionQuantity
       );
 
-      // Phase 6: Set exposure ledger to match the position
+      // Set exposure ledger to match the position
       await core.harnessAddExposure(marketId, 0, 2, positionQuantity);
 
       // Submit oracle price and settle market
@@ -304,7 +304,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
         positionQuantity
       );
 
-      // Phase 6: Set exposure ledger to match the position
+      // Set exposure ledger to match the position
       await core.harnessAddExposure(marketId, 0, 2, positionQuantity);
 
       // Settle market
@@ -344,10 +344,10 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
   // ================================================================
   // SPEC-2: claimPayout MUST NOT change NAV/Price
-  // (WP v1.0: Payout is escrowed at settlement finalization.
-  //  claim() draws only from escrow, not from vault NAV.
-  //  NAV is unaffected because payout liability was already
-  //  deducted at settlement via L_t = ΔC_t - Payout_t)
+  // Payout is escrowed at settlement finalization.
+  // claim() draws only from escrow, not from vault NAV.
+  // NAV is unaffected because payout liability was already
+  // deducted at settlement via L_t = ΔC_t - Payout_t.
   // ================================================================
   describe("SPEC-2: claimPayout does NOT change NAV/Price", () => {
     it("NAV is unchanged after claimPayout", async () => {
@@ -372,7 +372,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
         positionQuantity
       );
 
-      // Phase 6: Set exposure ledger to match the position
+      // Set exposure ledger to match the position
       await core.harnessAddExposure(marketId, 0, 2, positionQuantity);
 
       // Settle and process batch
@@ -426,7 +426,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await position.mockMint(trader.address, 1n, marketId, 0, 2, qty1);
       await position.mockMint(owner.address, 2n, marketId, 0, 2, qty2);
 
-      // Phase 6: Set exposure ledger to match the positions
+      // Set exposure ledger to match the positions
       await core.harnessAddExposure(marketId, 0, 2, qty1);
       await core.harnessAddExposure(marketId, 0, 2, qty2);
 
@@ -469,7 +469,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
 
   // ================================================================
   // SPEC-3: Payout reserve is reflected in L_t calculation
-  // (WP v2 Sec 3.5 Eq 3.11-3.12: L_t = ΔC_t - Payout_t)
+  // (L_t = ΔC_t - Payout_t)
   // ================================================================
   describe("SPEC-3: Payout reserve affects L_t", () => {
     it("L_t includes payout deduction (ΔC_t - Payout_t)", async () => {
@@ -493,7 +493,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
         positionQuantity
       );
 
-      // Phase 6: Set exposure ledger to match the position
+      // Set exposure ledger to match the position
       await core.harnessAddExposure(marketId, 0, 2, positionQuantity);
 
       // Settle
@@ -546,7 +546,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       await position.mockMint(owner.address, 2n, marketId, 0, 2, winningQty2); // wins
       await position.mockMint(trader.address, 3n, marketId, 2, 4, losingQty); // loses (tick 1 not in [2,4))
 
-      // Phase 6: Set exposure ledger to match positions
+      // Set exposure ledger to match positions
       await core.harnessAddExposure(marketId, 0, 2, winningQty1);
       await core.harnessAddExposure(marketId, 0, 2, winningQty2);
       await core.harnessAddExposure(marketId, 2, 4, losingQty);
@@ -571,8 +571,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
       // Expected total payout = winningQty1 + winningQty2
       const expectedTotalPayout = winningQty1 + winningQty2;
 
-      // Get payout reserve from storage (Phase 6 will add this)
-      // For now, we verify by claiming all and checking balance changes
+      // Verify by claiming all and checking balance changes
       const balanceBefore = await payment.balanceOf(await core.getAddress());
 
       // Claims past claim window
@@ -596,7 +595,7 @@ describe("PayoutReserve Spec Tests (WP v2 Sec 3.5)", () => {
   });
 
   // ==================================================================
-  // Failure Path + Batch/Claim Separation (Phase 7)
+  // Failure Path + Batch/Claim Separation
   // ==================================================================
   describe("Failure Path & Batch/Claim Separation", () => {
     let core: SignalsCoreHarness;
