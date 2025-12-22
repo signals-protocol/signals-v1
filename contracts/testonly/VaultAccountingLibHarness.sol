@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../vault/lib/VaultAccountingLib.sol";
+import "../lib/VaultAccountingLib.sol";
 
 /**
  * @title VaultAccountingLibHarness

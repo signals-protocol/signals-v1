@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../../lib/FixedPointMathU.sol";
+import "./FixedPointMathU.sol";
 import "./FeeWaterfallLib.sol";
-import {SignalsErrors as SE} from "../../errors/SignalsErrors.sol";
+import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 
 /**
  * @title VaultAccountingLib

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {FixedPointMathU} from "../../../lib/FixedPointMathU.sol";
-import {SignalsErrors as SE} from "../../../errors/SignalsErrors.sol";
+import {FixedPointMathU} from "./FixedPointMathU.sol";
+import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 
 /// @notice Dense lazy multiplication segment tree for CLMSR math.
 /// @dev Uses 1-based implicit indexing: root=1, left=2i, right=2i+1.

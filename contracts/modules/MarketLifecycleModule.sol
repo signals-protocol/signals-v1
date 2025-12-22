@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../core/storage/SignalsCoreStorage.sol";
+import "../core/SignalsCoreStorage.sol";
 import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
-import "./trade/lib/LazyMulSegmentTree.sol";
+import "../lib/LazyMulSegmentTree.sol";
 import "../lib/FixedPointMathU.sol";
-import "./trade/lib/ExposureDiffLib.sol";
-import "./trade/lib/TickBinLib.sol";
+import "../lib/ExposureDiffLib.sol";
+import "../lib/TickBinLib.sol";
 
 /// @notice Delegate-only lifecycle module (skeleton)
 contract MarketLifecycleModule is SignalsCoreStorage {

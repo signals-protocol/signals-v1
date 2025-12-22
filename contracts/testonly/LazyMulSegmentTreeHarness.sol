@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {LazyMulSegmentTree} from "../modules/trade/lib/LazyMulSegmentTree.sol";
+import {LazyMulSegmentTree} from "../lib/LazyMulSegmentTree.sol";
 import {FixedPointMathU} from "../lib/FixedPointMathU.sol";
 import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 

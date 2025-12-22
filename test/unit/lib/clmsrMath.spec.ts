@@ -1,17 +1,15 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { deployClmsrMathHarness } from "../../helpers";
 
 const WAD = ethers.parseEther("1");
 const LN_MAX_FACTOR = ethers.parseUnits("4605170185988091368", 0); // ln(100) * 1e18
 const MAX_EXP_INPUT = ethers.parseUnits("135305999368893231589", 0); // from FixedPointMathU
 
-describe("SignalsDistributionMath", () => {
+describe("ClmsrMath", () => {
   async function deployFixture() {
-    // Deploy a test harness that exposes SignalsDistributionMath functions
-    const Factory = await ethers.getContractFactory("SignalsDistributionMathHarness");
-    const harness = await Factory.deploy();
-    await harness.waitForDeployment();
+    const harness = await deployClmsrMathHarness();
     return { harness };
   }
 
@@ -129,6 +127,148 @@ describe("SignalsDistributionMath", () => {
       // cost = α * ln(200/100) = α * ln(2) ≈ 0.693 * α
       const expectedLn2 = ethers.parseUnits("693147180559945309", 0); // ln(2) * 1e18
       expect(cost).to.be.closeTo(expectedLn2, expectedLn2 / 1000n);
+    });
+
+    it("returns 0 when sumAfter is slightly larger (within ln precision)", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      const alpha = WAD;
+      // Very small increase: ln(100.000...1 / 100) ≈ 0
+      const sumBefore = WAD * 100n;
+      const sumAfter = WAD * 100n + 1n;
+      
+      const cost = await harness.computeBuyCostFromSumChange(alpha, sumBefore, sumAfter);
+      
+      // ln of ratio very close to 1 is essentially 0
+      expect(cost).to.equal(0n);
+    });
+  });
+
+  describe("exposedSafeExp", () => {
+    it("computes exp(q/α) correctly", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      // exp(1) = e ≈ 2.718
+      const result = await harness.exposedSafeExp(WAD, WAD);
+      const expectedE = ethers.parseUnits("2718281828459045235", 0);
+      expect(result).to.be.closeTo(expectedE, expectedE / 1000n);
+    });
+
+    it("reverts when alpha = 0", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      await expect(harness.exposedSafeExp(WAD, 0)).to.be.revertedWithCustomError(
+        harness,
+        "InvalidLiquidityParameter"
+      );
+    });
+
+    it("reverts on overflow", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      // q/α > MAX_EXP_INPUT should overflow
+      const tooLarge = MAX_EXP_INPUT + WAD;
+      await expect(harness.exposedSafeExp(tooLarge, WAD)).to.be.revertedWithCustomError(
+        harness,
+        "FP_Overflow"
+      );
+    });
+  });
+
+  describe("quoteBuy (calculateTradeCost)", () => {
+    it("computes buy cost for range", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      // Seed with uniform distribution [1, 1, 1, 1]
+      await harness.seed([WAD, WAD, WAD, WAD]);
+      
+      const alpha = WAD;
+      const quantity = WAD / 10n; // 0.1 WAD
+      
+      // Buy on range [0, 1] (2 bins out of 4)
+      const cost = await harness.quoteBuy(alpha, 0, 1, quantity);
+      
+      // Cost should be positive
+      expect(cost).to.be.gt(0n);
+      // Cost should be less than quantity (partial range)
+      expect(cost).to.be.lt(quantity);
+    });
+
+    it("full range buy: cost ≈ quantity", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      await harness.seed([WAD, WAD, WAD, WAD]);
+      
+      const alpha = WAD;
+      const quantity = WAD / 10n;
+      
+      // Full range [0, 3]
+      const cost = await harness.quoteBuy(alpha, 0, 3, quantity);
+      
+      // Full range cost ≈ quantity (within tolerance)
+      expect(cost).to.be.closeTo(quantity, quantity / 100n);
+    });
+
+    it("returns 0 for zero quantity", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      await harness.seed([WAD, WAD, WAD, WAD]);
+      
+      const cost = await harness.quoteBuy(WAD, 0, 1, 0n);
+      expect(cost).to.equal(0n);
+    });
+  });
+
+  describe("quoteSell (calculateSellProceeds)", () => {
+    it("computes sell proceeds for range", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      // Start with non-uniform: simulate having bought before
+      await harness.seed([WAD * 2n, WAD * 2n, WAD, WAD]);
+      
+      const alpha = WAD;
+      const quantity = WAD / 10n;
+      
+      // Sell on range [0, 1]
+      const proceeds = await harness.quoteSell(alpha, 0, 1, quantity);
+      
+      // Proceeds should be positive
+      expect(proceeds).to.be.gt(0n);
+    });
+
+    it("returns 0 for zero quantity", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      await harness.seed([WAD, WAD, WAD, WAD]);
+      
+      const proceeds = await harness.quoteSell(WAD, 0, 1, 0n);
+      expect(proceeds).to.equal(0n);
+    });
+  });
+
+  describe("quantityFromCost (inverse pricing)", () => {
+    it("computes quantity from cost", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      await harness.seed([WAD, WAD, WAD, WAD]);
+      
+      const alpha = WAD;
+      const targetCost = WAD / 10n;
+      
+      // Get quantity for given cost on range [0, 1]
+      const quantity = await harness.quantityFromCost(alpha, 0, 1, targetCost);
+      
+      // Quantity should be positive
+      expect(quantity).to.be.gt(0n);
+    });
+
+    it("returns 0 for zero cost", async () => {
+      const { harness } = await loadFixture(deployFixture);
+      
+      await harness.seed([WAD, WAD, WAD, WAD]);
+      
+      const quantity = await harness.quantityFromCost(WAD, 0, 1, 0n);
+      expect(quantity).to.equal(0n);
     });
   });
 });

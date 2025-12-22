@@ -26,6 +26,30 @@ describe("TradeModule slippage and bounds", () => {
     await core.connect(user).decreasePosition(1, 1_000, quote);
   });
 
+  it("reverts increase when cost exceeds maxCost", async () => {
+    const { users, core, tradeModule } = await deployMinimalTradeSystem();
+    const user = users[0];
+    await core.connect(user).openPosition(1, 0, 4, 1_000, 10_000_000);
+    // Use a maxCost of 0 to guarantee failure
+    await expect(
+      core.connect(user).increasePosition(1, 500, 0)
+    ).to.be.revertedWithCustomError(tradeModule, "CostExceedsMaximum");
+    // Use a large maxCost to succeed
+    await core.connect(user).increasePosition(1, 500, 10_000_000);
+  });
+
+  it("reverts close when proceeds fall below minProceeds", async () => {
+    const { users, core, tradeModule } = await deployMinimalTradeSystem();
+    const user = users[0];
+    await core.connect(user).openPosition(1, 0, 4, 1_000, 10_000_000);
+    // Use an impossibly high minProceeds to guarantee failure
+    await expect(
+      core.connect(user).closePosition(1, ethers.MaxUint256)
+    ).to.be.revertedWithCustomError(tradeModule, "ProceedsBelowMinimum");
+    // Use 0 minProceeds to succeed
+    await core.connect(user).closePosition(1, 0);
+  });
+
   it("rejects trades on settled market", async () => {
     const { users, core } = await deployMinimalTradeSystem();
     const user = users[0];

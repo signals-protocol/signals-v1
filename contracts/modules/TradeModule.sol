@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../core/storage/SignalsCoreStorage.sol";
+import "../core/SignalsCoreStorage.sol";
 import "../interfaces/ISignalsCore.sol";
 import "../interfaces/IFeePolicy.sol";
 import "../interfaces/ISignalsPosition.sol";
 import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
-import "../core/lib/SignalsDistributionMath.sol";
-import "../core/lib/SignalsClmsrMath.sol";
-import "./trade/lib/LazyMulSegmentTree.sol";
+import "../lib/ClmsrMath.sol";
+import "../lib/LazyMulSegmentTree.sol";
 import "../lib/FixedPointMathU.sol";
-import "./trade/lib/ExposureDiffLib.sol";
-import "./trade/lib/TickBinLib.sol";
+import "../lib/ExposureDiffLib.sol";
+import "../lib/TickBinLib.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @notice Delegate-only trade module
@@ -69,8 +68,7 @@ contract TradeModule is SignalsCoreStorage {
         uint256 factor
     );
 
-    using SignalsDistributionMath for LazyMulSegmentTree.Tree;
-    using SignalsClmsrMath for uint256;
+    using ClmsrMath for LazyMulSegmentTree.Tree;
     using LazyMulSegmentTree for LazyMulSegmentTree.Tree;
     using FixedPointMathU for uint256;
     using SafeERC20 for IERC20;
@@ -104,7 +102,7 @@ contract TradeModule is SignalsCoreStorage {
         (uint256 sumBefore, uint256 sumAfter) = _applyFactorChunked(marketId, lowerTick, upperTick, qtyWad, true);
         
         // Compute exact cost from actual sum change (no view/execute mismatch)
-        uint256 costWad = SignalsDistributionMath.computeBuyCostFromSumChange(
+        uint256 costWad = ClmsrMath.computeBuyCostFromSumChange(
             market.liquidityParameter, sumBefore, sumAfter
         );
         uint256 cost6 = _roundDebit(costWad);
@@ -149,7 +147,7 @@ contract TradeModule is SignalsCoreStorage {
         );
         
         // Compute exact cost from actual sum change
-        uint256 costWad = SignalsDistributionMath.computeBuyCostFromSumChange(
+        uint256 costWad = ClmsrMath.computeBuyCostFromSumChange(
             market.liquidityParameter, sumBefore, sumAfter
         );
         uint256 cost6 = _roundDebit(costWad);
@@ -365,7 +363,7 @@ contract TradeModule is SignalsCoreStorage {
         );
         
         // Compute exact proceeds from actual sum change
-        uint256 proceedsWad = SignalsDistributionMath.computeSellProceedsFromSumChange(
+        uint256 proceedsWad = ClmsrMath.computeSellProceedsFromSumChange(
             market.liquidityParameter, sumBefore, sumAfter
         );
         baseProceeds = _roundCredit(proceedsWad);
@@ -496,7 +494,7 @@ contract TradeModule is SignalsCoreStorage {
         );
         
         uint256 alpha = market.liquidityParameter;
-        uint256 maxSafeQty = SignalsDistributionMath.maxSafeChunkQuantity(alpha);
+        uint256 maxSafeQty = ClmsrMath.maxSafeChunkQuantity(alpha);
         
         sumBefore = tree.totalSum();
         
@@ -507,7 +505,7 @@ contract TradeModule is SignalsCoreStorage {
         while (remaining > 0 && chunkCount < MAX_CHUNKS_PER_TX) {
             uint256 chunkQty = remaining > maxSafeQty ? maxSafeQty : remaining;
             
-            uint256 factor = SignalsClmsrMath._safeExp(chunkQty, alpha);
+            uint256 factor = ClmsrMath._safeExp(chunkQty, alpha);
             if (!isBuy) {
                 factor = WAD.wDivUp(factor);
             }

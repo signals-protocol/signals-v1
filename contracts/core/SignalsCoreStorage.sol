@@ -2,9 +2,9 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../../interfaces/ISignalsCore.sol";
-import "../../interfaces/ISignalsPosition.sol";
-import "../../lib/LazyMulSegmentTree.sol";
+import "../interfaces/ISignalsCore.sol";
+import "../interfaces/ISignalsPosition.sol";
+import "../lib/LazyMulSegmentTree.sol";
 
 abstract contract SignalsCoreStorage {
     /// @dev Batch/day granularity for daily accounting. Used to derive batchId as day-key.

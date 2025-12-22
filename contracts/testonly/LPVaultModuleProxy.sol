@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../core/storage/SignalsCoreStorage.sol";
+import "../core/SignalsCoreStorage.sol";
 import "../modules/LPVaultModule.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 

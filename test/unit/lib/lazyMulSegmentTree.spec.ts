@@ -88,6 +88,14 @@ describe("LazyMulSegmentTree", () => {
       const { test } = await loadFixture(deployFixture);
       await expect(test.initAndSeed([])).to.be.reverted;
     });
+
+    it("reverts on factors length mismatch", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.init(10);
+      // 10 bins but only 5 factors
+      await expect(test.seedWithFactors([WAD, WAD, WAD, WAD, WAD])).to.be
+        .reverted;
+    });
   });
 
   // ============================================================

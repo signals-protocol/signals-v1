@@ -16,8 +16,16 @@ contract FixedPointMathHarness {
         return FixedPointMathU.wLn(x);
     }
 
+    function lnWadUp(uint256 n) public pure returns (uint256) {
+        return FixedPointMathU.lnWadUp(n);
+    }
+
     function wMul(uint256 a, uint256 b) public pure returns (uint256) {
         return FixedPointMathU.wMul(a, b);
+    }
+
+    function wMulUp(uint256 a, uint256 b) public pure returns (uint256) {
+        return FixedPointMathU.wMulUp(a, b);
     }
 
     function wMulNearest(uint256 a, uint256 b) public pure returns (uint256) {

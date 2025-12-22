@@ -194,6 +194,59 @@ describe("RiskModule", () => {
       const ln1 = await riskModule.lnWad(1n);
       expect(ln1).to.equal(0n);
     });
+
+    it("returns 0 for n=0 (boundary)", async () => {
+      const ln0 = await riskModule.lnWad(0n);
+      expect(ln0).to.equal(0n);
+    });
+  });
+
+  // ============================================================
+  // Edge Cases: numBins boundary conditions
+  // ============================================================
+  describe("Edge Cases: numBins boundaries", () => {
+    it("numBins = 1 reverts with InvalidNumBins (ln(1) = 0 would cause div by zero)", async () => {
+      const Et = ethers.parseEther("10000");
+      const numBins = 1n;
+
+      // ln(1) = 0 → αbase = λ * Et / 0 would be division by zero
+      // Contract correctly rejects numBins = 1 to prevent this
+      await expect(
+        riskModule.calculateAlphaBase(Et, numBins, LAMBDA)
+      ).to.be.revertedWithCustomError(riskModule, "InvalidNumBins");
+    });
+
+    it("numBins = 2 provides valid αbase", async () => {
+      const Et = ethers.parseEther("10000");
+      const numBins = 2n;
+
+      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
+
+      // ln(2) ≈ 0.693 WAD
+      // αbase = 0.3 * 10000 / 0.693 ≈ 4329
+      expect(alphaBase).to.be.gt(0n);
+      expect(alphaBase).to.be.lt(ethers.parseEther("5000"));
+    });
+
+    it("numBins = 256 (MAX_BINS) provides valid αbase", async () => {
+      const Et = ethers.parseEther("10000");
+      const numBins = 256n;
+
+      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
+
+      // ln(256) ≈ 5.545 WAD
+      // αbase = 0.3 * 10000 / 5.545 ≈ 541
+      expect(alphaBase).to.be.gt(ethers.parseEther("400"));
+      expect(alphaBase).to.be.lt(ethers.parseEther("700"));
+    });
+
+    it("Et = 0 causes αbase = 0", async () => {
+      const Et = 0n;
+      const numBins = 100n;
+
+      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
+      expect(alphaBase).to.equal(0n);
+    });
   });
 
   // ============================================================

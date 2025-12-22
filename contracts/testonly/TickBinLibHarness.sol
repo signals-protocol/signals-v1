@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../modules/trade/lib/TickBinLib.sol";
+import "../lib/TickBinLib.sol";
 
 /// @notice Test harness for TickBinLib library.
 /// @dev Exposes tick-bin conversion functions for unit testing.

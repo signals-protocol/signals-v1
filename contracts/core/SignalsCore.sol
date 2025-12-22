@@ -8,7 +8,7 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "./storage/SignalsCoreStorage.sol";
+import "./SignalsCoreStorage.sol";
 import "../interfaces/ISignalsCore.sol";
 import "../interfaces/ISignalsPosition.sol";
 import "../interfaces/IRiskModule.sol";

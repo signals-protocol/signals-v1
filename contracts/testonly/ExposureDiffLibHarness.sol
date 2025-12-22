@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../modules/trade/lib/ExposureDiffLib.sol";
+import "../lib/ExposureDiffLib.sol";
 
 /// @notice Test harness for ExposureDiffLib library.
 /// @dev Exposes diff array operations for unit testing.

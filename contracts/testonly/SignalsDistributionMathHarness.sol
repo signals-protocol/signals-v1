@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../core/lib/SignalsDistributionMath.sol";
+import "../core/lib/ClmsrMath.sol";
 
-/// @title SignalsDistributionMathHarness
-/// @notice Test harness to expose internal library functions
-contract SignalsDistributionMathHarness {
+/// @title ClmsrMathCostHarness
+/// @notice Test harness to expose ClmsrMath cost/proceeds functions
+contract ClmsrMathCostHarness {
     function maxSafeChunkQuantity(uint256 alpha) external pure returns (uint256) {
-        return SignalsDistributionMath.maxSafeChunkQuantity(alpha);
+        return ClmsrMath.maxSafeChunkQuantity(alpha);
     }
 
     function computeBuyCostFromSumChange(
@@ -15,7 +15,7 @@ contract SignalsDistributionMathHarness {
         uint256 sumBefore,
         uint256 sumAfter
     ) external pure returns (uint256) {
-        return SignalsDistributionMath.computeBuyCostFromSumChange(alpha, sumBefore, sumAfter);
+        return ClmsrMath.computeBuyCostFromSumChange(alpha, sumBefore, sumAfter);
     }
 
     function computeSellProceedsFromSumChange(
@@ -23,7 +23,11 @@ contract SignalsDistributionMathHarness {
         uint256 sumBefore,
         uint256 sumAfter
     ) external pure returns (uint256) {
-        return SignalsDistributionMath.computeSellProceedsFromSumChange(alpha, sumBefore, sumAfter);
+        return ClmsrMath.computeSellProceedsFromSumChange(alpha, sumBefore, sumAfter);
+    }
+
+    function safeExp(uint256 numeratorWad, uint256 alpha) external pure returns (uint256) {
+        return ClmsrMath._safeExp(numeratorWad, alpha);
     }
 }
 

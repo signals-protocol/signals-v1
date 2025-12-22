@@ -3,11 +3,11 @@ import { ethers } from 'hardhat';
 import { RiskModule } from '../../../typechain-types';
 
 /**
- * RiskMathLib Unit Tests
+ * RiskMath Unit Tests
  * Tests core risk calculations per whitepaper sections 4.1-4.5
  */
-describe('RiskMathLib', () => {
-  // We test RiskMathLib through RiskModule since library functions are internal
+describe('RiskMath', () => {
+  // We test RiskMath through RiskModule since library functions are internal
   let riskModule: RiskModule;
 
   beforeEach(async () => {
@@ -82,6 +82,28 @@ describe('RiskMathLib', () => {
       const alphaLimit = await riskModule.calculateAlphaLimit(alphaBase, drawdown, k);
       
       expect(alphaLimit).to.equal(0n);
+    });
+  });
+
+  describe('calculateDeltaEt', () => {
+    it('returns 0 for uniform prior (concentration = 0)', async () => {
+      const alpha = ethers.parseEther('100');
+      const numBins = 10;
+      const priorConcentration = 0n; // uniform
+      
+      const deltaEt = await riskModule.calculateDeltaEt(alpha, numBins, priorConcentration);
+      
+      expect(deltaEt).to.equal(0n);
+    });
+
+    it('returns positive value for concentrated prior', async () => {
+      const alpha = ethers.parseEther('100');
+      const numBins = 10;
+      const priorConcentration = ethers.parseEther('0.5'); // 50% concentration
+      
+      const deltaEt = await riskModule.calculateDeltaEt(alpha, numBins, priorConcentration);
+      
+      expect(deltaEt).to.be.gt(0n);
     });
   });
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {LazyMulSegmentTree} from "../../lib/LazyMulSegmentTree.sol";
-import {FixedPointMathU} from "../../lib/FixedPointMathU.sol";
-import {SignalsErrors as SE} from "../../errors/SignalsErrors.sol";
+import {LazyMulSegmentTree} from "./LazyMulSegmentTree.sol";
+import {FixedPointMathU} from "./FixedPointMathU.sol";
+import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 
 /// @notice CLMSR math library for cost/proceeds calculation over segment trees.
 /// @dev Implements whitepaper Section 2 (CLMSR Pricing Engine).

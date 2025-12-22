@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../modules/trade/lib/LazyMulSegmentTree.sol";
-import "../core/lib/SignalsClmsrMath.sol";
-import "../core/lib/SignalsDistributionMath.sol";
+import "../lib/LazyMulSegmentTree.sol";
+import "../lib/ClmsrMath.sol";
 import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 
 /// @notice Harness for CLMSR math: initializes a tree from bins and exposes quote helpers.
-/// @dev Uses the same LazyMulSegmentTree/SignalsDistributionMath stack that will back TradeModule,
+/// @dev Uses the same LazyMulSegmentTree/ClmsrMath stack that backs TradeModule,
 ///      but without touching SignalsCore storage.
 contract ClmsrMathHarness {
     using LazyMulSegmentTree for LazyMulSegmentTree.Tree;
@@ -37,7 +36,7 @@ contract ClmsrMathHarness {
         uint32 hiBin,
         uint256 quantityWad
     ) external view returns (uint256 costWad) {
-        costWad = SignalsDistributionMath.calculateTradeCost(tree, alpha, loBin, hiBin, quantityWad);
+        costWad = ClmsrMath.calculateTradeCost(tree, alpha, loBin, hiBin, quantityWad);
     }
 
     function quoteSell(
@@ -46,7 +45,7 @@ contract ClmsrMathHarness {
         uint32 hiBin,
         uint256 quantityWad
     ) external view returns (uint256 proceedsWad) {
-        proceedsWad = SignalsDistributionMath.calculateSellProceeds(tree, alpha, loBin, hiBin, quantityWad);
+        proceedsWad = ClmsrMath.calculateSellProceeds(tree, alpha, loBin, hiBin, quantityWad);
     }
 
     function quantityFromCost(
@@ -55,11 +54,35 @@ contract ClmsrMathHarness {
         uint32 hiBin,
         uint256 costWad
     ) external view returns (uint256 quantityWad) {
-        quantityWad = SignalsDistributionMath.calculateQuantityFromCost(tree, alpha, loBin, hiBin, costWad);
+        quantityWad = ClmsrMath.calculateQuantityFromCost(tree, alpha, loBin, hiBin, costWad);
     }
 
     /// @notice Expose the core safe exponential helper for parity tests against v0.
     function exposedSafeExp(uint256 qWad, uint256 alphaWad) external pure returns (uint256) {
-        return SignalsClmsrMath._safeExp(qWad, alphaWad);
+        return ClmsrMath._safeExp(qWad, alphaWad);
+    }
+
+    // ============================================================
+    // Pure math helpers (no tree state)
+    // ============================================================
+
+    function maxSafeChunkQuantity(uint256 alpha) external pure returns (uint256) {
+        return ClmsrMath.maxSafeChunkQuantity(alpha);
+    }
+
+    function computeBuyCostFromSumChange(
+        uint256 alpha,
+        uint256 sumBefore,
+        uint256 sumAfter
+    ) external pure returns (uint256) {
+        return ClmsrMath.computeBuyCostFromSumChange(alpha, sumBefore, sumAfter);
+    }
+
+    function computeSellProceedsFromSumChange(
+        uint256 alpha,
+        uint256 sumBefore,
+        uint256 sumAfter
+    ) external pure returns (uint256) {
+        return ClmsrMath.computeSellProceedsFromSumChange(alpha, sumBefore, sumAfter);
     }
 }

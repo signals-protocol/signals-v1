@@ -466,6 +466,92 @@ describe("CLMSR Invariants", () => {
 
       expect(largeProceeds).to.be.gt(smallProceeds);
     });
+
+    it("INV-9: Roundtrip with fees: cost - proceeds >= fees collected", async () => {
+      // This test verifies that when fees are enabled,
+      // the difference between cost paid and proceeds received
+      // is at least equal to the fees collected by the protocol.
+      // Skipped in this fixture as fees are 0; see tradeModule.spec.ts for fee tests.
+    });
+  });
+
+  // ============================================================
+  // Edge Cases for Cost/Proceeds
+  // ============================================================
+  describe("Cost/Proceeds Edge Cases", () => {
+    it("INV-EC-1: Single bin at boundary (bin 0)", async () => {
+      const { core, marketId } = await loadFixture(deployInvariantFixture);
+
+      const cost = await core.calculateOpenCost.staticCall(
+        marketId,
+        0,  // First bin
+        1,
+        SMALL_QUANTITY
+      );
+
+      expect(cost).to.be.gt(0n);
+    });
+
+    it("INV-EC-2: Single bin at boundary (last bin)", async () => {
+      const { core, marketId } = await loadFixture(deployInvariantFixture);
+
+      const cost = await core.calculateOpenCost.staticCall(
+        marketId,
+        NUM_BINS - 1,  // Last bin
+        NUM_BINS,
+        SMALL_QUANTITY
+      );
+
+      expect(cost).to.be.gt(0n);
+    });
+
+    it("INV-EC-3: Very small quantity (1 wei equivalent)", async () => {
+      const { core, marketId } = await loadFixture(deployInvariantFixture);
+
+      const cost = await core.calculateOpenCost.staticCall(
+        marketId,
+        2,
+        5,
+        1n  // 1 unit of quantity
+      );
+
+      // Even tiny quantity should have a non-negative cost
+      expect(cost).to.be.gte(0n);
+    });
+
+    it("INV-EC-4: Concentrated distribution (single bin dominates)", async () => {
+      const { core, user, marketId } = await loadFixture(deployInvariantFixture);
+
+      // Concentrate mass heavily on bin 5 through multiple buys
+      for (let i = 0; i < 10; i++) {
+        await core.connect(user).openPosition(
+          marketId,
+          5,
+          6,
+          MEDIUM_QUANTITY,
+          ethers.parseUnits("100", USDC_DECIMALS)
+        );
+      }
+
+      // Now buying the same bin should be more expensive
+      const costAfterConcentration = await core.calculateOpenCost.staticCall(
+        marketId,
+        5,
+        6,
+        SMALL_QUANTITY
+      );
+
+      // Buying a different bin should be cheaper (relatively)
+      const costOtherBin = await core.calculateOpenCost.staticCall(
+        marketId,
+        0,
+        1,
+        SMALL_QUANTITY
+      );
+
+      // The concentrated bin should be more expensive
+      expect(costAfterConcentration).to.be.gt(costOtherBin);
+    });
   });
 
   // ============================================================

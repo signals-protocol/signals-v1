@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../core/storage/SignalsCoreStorage.sol";
+import "../core/SignalsCoreStorage.sol";
 import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 import "@redstone-finance/evm-connector/contracts/data-services/PrimaryProdDataServiceConsumerBase.sol";
 

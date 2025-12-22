@@ -11,8 +11,8 @@ test/
 │   │   ├── fixedPointMath.spec.ts       # WAD arithmetic: wMul, wDiv, wExp, wLn
 │   │   ├── fixedPointMathPrecision.spec.ts # High-precision ln/exp tests
 │   │   ├── lazyMulSegmentTree.spec.ts   # Segment tree operations
-│   │   ├── riskMathLib.spec.ts          # Risk calculations
-│   │   ├── signalsDistributionMath.spec.ts # CLMSR distribution math
+│   │   ├── riskMath.spec.ts             # Risk calculations (α, drawdown, ΔE)
+│   │   ├── clmsrMath.spec.ts            # CLMSR cost/proceeds math
 │   │   ├── tickBinLib.spec.ts           # Tick-bin conversion
 │   │   └── vaultAccountingLib.spec.ts   # NAV, shares, price calculations
 │   ├── position/          # SignalsPosition contract
@@ -20,8 +20,6 @@ test/
 │   │   ├── erc721.spec.ts         # ERC721 compliance
 │   │   ├── signalsPosition.spec.ts # Core position logic
 │   │   └── storage.spec.ts        # Storage layout
-│   ├── tokens/            # Token contracts
-│   │   └── signalsLPShare.spec.ts # LP share token
 │   └── tokens/            # Token contracts
 │       └── signalsLPShare.spec.ts # LP share token
 │
@@ -194,11 +192,26 @@ yarn hardhat test test/unit/lib/fixedPointMath.spec.ts
 
 | Layer        | Files  | Tests    |
 | ------------ | ------ | -------- |
-| unit/        | 12     | ~120     |
-| module/      | 7      | ~40      |
-| integration/ | 14     | ~150     |
+| unit/        | 14     | ~140     |
+| module/      | 7      | ~50      |
+| integration/ | 16     | ~180     |
 | parity/      | 2      | ~30      |
-| invariant/   | 3      | ~20      |
-| security/    | 6      | ~50      |
-| e2e/         | 1      | ~34      |
-| **Total**    | **45** | **~450** |
+| invariant/   | 3      | ~30      |
+| security/    | 6      | ~60      |
+| e2e/         | 1      | ~35      |
+| **Total**    | **49** | **~525** |
+
+## Layer Integrity
+
+### Principles
+1. **Isolation**: Lower layers should not depend on higher layers
+2. **Independence**: Tests at same layer should not depend on each other
+3. **Completeness**: Each layer tests its specific scope without overlap
+
+### Verification Checklist
+- ✅ unit/ tests do not import from module/ or integration/
+- ✅ module/ tests use proxy wrappers for delegatecall simulation
+- ✅ integration/ tests use full system deployment
+- ✅ security/ tests cover attack vectors independently
+- ✅ invariant/ tests use property-based testing patterns
+- ✅ parity/ tests compare SDK vs on-chain calculations

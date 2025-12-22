@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../core/storage/SignalsCoreStorage.sol";
+import "../core/SignalsCoreStorage.sol";
 import "../interfaces/ISignalsCore.sol";
 import "../interfaces/ISignalsPosition.sol";
 import "../interfaces/IFeePolicy.sol";
-import "../modules/trade/lib/LazyMulSegmentTree.sol";
+import "../lib/LazyMulSegmentTree.sol";
 
 /// @notice Minimal core proxy to delegate trade/view calls to TradeModule for tests.
 contract TradeModuleProxy is SignalsCoreStorage {

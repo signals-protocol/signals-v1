@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../../lib/FixedPointMathU.sol";
-import {SignalsErrors as SE} from "../../errors/SignalsErrors.sol";
+import "./FixedPointMathU.sol";
+import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 
 /// @title FeeWaterfallLib
 /// @notice Pure library implementing the Fee Waterfall algorithm

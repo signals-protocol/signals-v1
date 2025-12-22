@@ -38,6 +38,53 @@ describe("SignalsPosition", () => {
     await expect(position.getPosition(1)).to.be.revertedWithCustomError(position, "PositionNotFound");
   });
 
+  // ============================================================
+  // Edge Cases: Range Validation
+  // ============================================================
+  describe("Edge Cases: Range Validation", () => {
+    it("reverts burn on non-existent position", async () => {
+      const [core] = await ethers.getSigners();
+      const position = await deployPosition(core.address);
+      
+      // Burn non-existent position (ID 999)
+      await expect(position.connect(core).burn(999)).to.be.reverted;
+    });
+
+    it("reverts double burn", async () => {
+      const [core, user] = await ethers.getSigners();
+      const position = await deployPosition(core.address);
+      
+      await position.connect(core).mintPosition(user.address, 1, 0, 1, 1_000);
+      await position.connect(core).burn(1);
+      
+      // Double burn should fail
+      await expect(position.connect(core).burn(1)).to.be.reverted;
+    });
+
+    it("handles maximum quantity value", async () => {
+      const [core, user] = await ethers.getSigners();
+      const position = await deployPosition(core.address);
+      
+      // Max uint128 quantity
+      const maxQty = (2n ** 128n) - 1n;
+      await position.connect(core).mintPosition(user.address, 1, 0, 1, maxQty);
+      
+      const pos = await position.getPosition(1);
+      expect(pos.quantity).to.equal(maxQty);
+    });
+
+    it("handles zero-based tick ranges", async () => {
+      const [core, user] = await ethers.getSigners();
+      const position = await deployPosition(core.address);
+      
+      // Mint at [0, 1) range
+      await position.connect(core).mintPosition(user.address, 1, 0, 1, 1_000);
+      const pos = await position.getPosition(1);
+      expect(pos.lowerTick).to.equal(0);
+      expect(pos.upperTick).to.equal(1);
+    });
+  });
+
   it("tracks owner indices across mint/transfer/burn", async () => {
     const [core, alice, bob] = await ethers.getSigners();
     const position = await deployPosition(core.address);

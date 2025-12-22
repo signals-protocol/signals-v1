@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "../modules/TradeModule.sol";
-import "../modules/trade/lib/TickBinLib.sol";
+import "../lib/TickBinLib.sol";
 
 /// @notice Harness to expose TradeModule validation helpers for testing.
 contract TradeModuleHarness is TradeModule {

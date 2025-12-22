@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../core/storage/SignalsCoreStorage.sol";
+import "../core/SignalsCoreStorage.sol";
 import "../lib/FixedPointMathU.sol";
-import "./risk/lib/RiskMathLib.sol";
+import "../lib/RiskMath.sol";
 import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 
 /// @title RiskModule
@@ -84,7 +84,7 @@ contract RiskModule is SignalsCoreStorage {
 
     /**
      * @notice Calculate αbase from NAV and bins
-     * @dev Delegates to RiskMathLib library
+     * @dev Delegates to RiskMath library
      * @param Et Vault NAV (WAD)
      * @param numBins Number of outcome bins n
      * @param lambda Safety parameter λ (WAD, e.g., 0.3 = 30% max drawdown)
@@ -95,12 +95,12 @@ contract RiskModule is SignalsCoreStorage {
         uint256 numBins,
         uint256 lambda
     ) external pure returns (uint256 alphaBase) {
-        return RiskMathLib.calculateAlphaBase(Et, numBins, lambda);
+        return RiskMath.calculateAlphaBase(Et, numBins, lambda);
     }
 
     /**
      * @notice Calculate αlimit from αbase and drawdown
-     * @dev Delegates to RiskMathLib library
+     * @dev Delegates to RiskMath library
      * @param alphaBase Base liquidity parameter (WAD)
      * @param drawdown Current drawdown DD_t (WAD, 0 to WAD)
      * @param k Drawdown sensitivity factor (WAD, typically 1.0)
@@ -111,12 +111,12 @@ contract RiskModule is SignalsCoreStorage {
         uint256 drawdown,
         uint256 k
     ) external pure returns (uint256 alphaLimit) {
-        return RiskMathLib.calculateAlphaLimit(alphaBase, drawdown, k);
+        return RiskMath.calculateAlphaLimit(alphaBase, drawdown, k);
     }
 
     /**
      * @notice Get current αlimit for the system
-     * @dev Combines αbase calculation with current drawdown using RiskMathLib
+     * @dev Combines αbase calculation with current drawdown using RiskMath
      * @param numBins Number of bins for α calculation
      * @param lambda Safety parameter λ (WAD)
      * @param k Drawdown sensitivity factor (WAD)
@@ -129,9 +129,9 @@ contract RiskModule is SignalsCoreStorage {
     ) external view onlyDelegated returns (uint256 alphaLimit) {
         if (lpVault.nav == 0) return 0;
         
-        uint256 alphaBase = RiskMathLib.calculateAlphaBase(lpVault.nav, numBins, lambda);
-        uint256 drawdown = RiskMathLib.calculateDrawdown(lpVault.price, lpVault.pricePeak);
-        alphaLimit = RiskMathLib.calculateAlphaLimit(alphaBase, drawdown, k);
+        uint256 alphaBase = RiskMath.calculateAlphaBase(lpVault.nav, numBins, lambda);
+        uint256 drawdown = RiskMath.calculateDrawdown(lpVault.price, lpVault.pricePeak);
+        alphaLimit = RiskMath.calculateAlphaLimit(alphaBase, drawdown, k);
     }
 
     // ============================================================
@@ -159,12 +159,12 @@ contract RiskModule is SignalsCoreStorage {
 
     /**
      * @notice Calculate natural log of n in WAD (safe upper bound)
-     * @dev Delegates to RiskMathLib library
+     * @dev Delegates to RiskMath library
      * @param n Input value (not WAD)
      * @return Natural log of n in WAD precision (rounded up)
      */
     function lnWad(uint256 n) external pure returns (uint256) {
-        return RiskMathLib.lnWadUp(n);
+        return RiskMath.lnWadUp(n);
     }
 
     // ============================================================
@@ -254,7 +254,7 @@ contract RiskModule is SignalsCoreStorage {
     /**
      * @notice Enforce α ≤ αlimit
      * @dev Calculates current αlimit and reverts if exceeded
-     *      Uses RiskMathLib library for core calculations
+     *      Uses RiskMath library for core calculations
      * @param liquidityParameter Market α to validate (WAD)
      * @param numBins Number of outcome bins
      */
@@ -262,16 +262,16 @@ contract RiskModule is SignalsCoreStorage {
         if (!riskConfig.enforceAlpha) return; // Skip if enforcement disabled
         if (lpVault.nav == 0) return; // Skip if vault not seeded
         
-        // Calculate αbase using RiskMathLib
-        uint256 alphaBase = RiskMathLib.calculateAlphaBase(lpVault.nav, numBins, riskConfig.lambda);
+        // Calculate αbase using RiskMath
+        uint256 alphaBase = RiskMath.calculateAlphaBase(lpVault.nav, numBins, riskConfig.lambda);
         
-        // Calculate drawdown using RiskMathLib
-        uint256 drawdown = RiskMathLib.calculateDrawdown(lpVault.price, lpVault.pricePeak);
+        // Calculate drawdown using RiskMath
+        uint256 drawdown = RiskMath.calculateDrawdown(lpVault.price, lpVault.pricePeak);
         
-        // Calculate αlimit using RiskMathLib
-        uint256 alphaLimit = RiskMathLib.calculateAlphaLimit(alphaBase, drawdown, riskConfig.kDrawdown);
+        // Calculate αlimit using RiskMath
+        uint256 alphaLimit = RiskMath.calculateAlphaLimit(alphaBase, drawdown, riskConfig.kDrawdown);
         
-        // Enforce: α ≤ αlimit (using RiskMathLib error)
+        // Enforce: α ≤ αlimit (using RiskMath error)
         if (liquidityParameter > alphaLimit) {
             revert SE.AlphaExceedsLimit(liquidityParameter, alphaLimit);
         }
@@ -291,7 +291,7 @@ contract RiskModule is SignalsCoreStorage {
 
     /**
      * @notice Calculate ΔEₜ from base factors
-     * @dev Delegates to RiskMathLib library for calculation
+     * @dev Delegates to RiskMath library for calculation
      * @param alpha Market liquidity parameter α (WAD)
      * @param numBins Number of outcome bins
      * @param baseFactors Prior factor weights
@@ -302,7 +302,7 @@ contract RiskModule is SignalsCoreStorage {
         uint32 numBins,
         uint256[] calldata baseFactors
     ) internal pure returns (uint256 deltaEt) {
-        return RiskMathLib.calculateDeltaEtFromFactors(alpha, numBins, baseFactors);
+        return RiskMath.calculateDeltaEtFromFactors(alpha, numBins, baseFactors);
     }
 }
 

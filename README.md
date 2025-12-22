@@ -41,34 +41,40 @@ Signals is a modular smart contract system for prediction markets. It features:
 
 ```
 contracts/
+├── lib/                            # All libraries (no nested lib folders)
+│   ├── FixedPointMathU.sol         # WAD arithmetic
+│   ├── LazyMulSegmentTree.sol      # CLMSR segment tree
+│   ├── ClmsrMath.sol               # CLMSR cost/proceeds calculation
+│   ├── RiskMath.sol                # α/drawdown/ΔE calculations
+│   ├── FeeWaterfallLib.sol         # Fee distribution
+│   ├── VaultAccountingLib.sol      # Vault NAV/batch accounting
+│   ├── ExposureDiffLib.sol         # Exposure delta tracking
+│   └── TickBinLib.sol              # Tick/bin conversion
 ├── core/
-│   ├── SignalsCore.sol           # UUPS entry point
-│   └── storage/                  # Canonical storage layout
-├── modules/
-│   ├── TradeModule.sol           # Open/close/claim positions
-│   ├── MarketLifecycleModule.sol # Create/settle markets
-│   ├── OracleModule.sol          # Settlement price feed
-│   ├── LPVaultModule.sol         # LP deposit/withdraw
-│   └── RiskModule.sol            # α bounds, exposure caps
+│   ├── SignalsCore.sol             # UUPS entry point
+│   └── SignalsCoreStorage.sol      # Canonical storage layout
+├── modules/                        # Delegate modules (no nested folders)
+│   ├── TradeModule.sol             # Open/close/claim positions
+│   ├── MarketLifecycleModule.sol   # Create/settle markets
+│   ├── OracleModule.sol            # Settlement price feed
+│   ├── LPVaultModule.sol           # LP deposit/withdraw
+│   └── RiskModule.sol              # α bounds, exposure caps
 ├── position/
-│   └── SignalsPosition.sol       # Position NFT
-├── vault/
-│   └── lib/VaultAccountingLib.sol
+│   └── SignalsPosition.sol         # Position NFT (ERC721)
 ├── tokens/
-│   └── SignalsLPShare.sol        # ERC-4626 LP share token
-└── lib/
-    ├── LazyMulSegmentTree.sol    # CLMSR segment tree
-    ├── FeeWaterfallLib.sol       # Fee distribution math
-    ├── RiskMathLib.sol           # α/drawdown/ΔE calculations
-    └── FixedPointMathU.sol       # WAD arithmetic
+│   └── SignalsLPShare.sol          # LP share token (ERC-4626)
+├── interfaces/                     # Contract interfaces
+├── errors/                         # Custom errors
+└── testonly/                       # Test harnesses and mocks
 
 test/
-├── unit/         # Library and component tests
+├── unit/lib/     # Library unit tests
 ├── module/       # Single module tests
 ├── integration/  # Cross-module flows
 ├── invariant/    # Math property tests
 ├── parity/       # SDK compatibility
-└── security/     # Access control
+├── security/     # Access control
+└── e2e/          # End-to-end scenarios
 ```
 
 ## Getting Started

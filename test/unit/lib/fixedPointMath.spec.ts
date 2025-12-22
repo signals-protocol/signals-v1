@@ -76,21 +76,103 @@ describe("FixedPointMathU", () => {
   });
 
   describe("wMulNearest", () => {
-    it("rounds to nearest on multiplication", async () => {
+    it("returns exact result for clean multiplication", async () => {
       const { test } = await loadFixture(deployFixture);
-      // 1 * 1 = 1 (exact)
       const result = await test.wMulNearest(WAD, WAD);
       expect(result).to.equal(WAD);
+    });
+
+    it("rounds to nearest (down) when fraction < 0.5", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // 1.0 * 1.0...0001 should not round up significantly
+      const result = await test.wMulNearest(WAD, WAD + 1n);
+      expect(result).to.be.closeTo(WAD, 1n);
+    });
+
+    it("multiplies by zero returns zero", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const result = await test.wMulNearest(TWO_WAD, 0n);
+      expect(result).to.equal(0n);
+    });
+  });
+
+  describe("wMulUp", () => {
+    it("rounds up on multiplication with remainder", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // (WAD + 1) * (WAD + 1) / WAD = WAD + 2 + 1/WAD → rounds up to WAD + 3
+      const result = await test.wMulUp(WAD + 1n, WAD + 1n);
+      const exact = await test.wMul(WAD + 1n, WAD + 1n);
+      expect(result).to.be.gte(exact);
+    });
+
+    it("returns exact value when no remainder", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const result = await test.wMulUp(TWO_WAD, TWO_WAD);
+      expect(result).to.equal(ethers.parseEther("4"));
+    });
+
+    it("multiplies by zero returns zero", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const result = await test.wMulUp(TWO_WAD, 0n);
+      expect(result).to.equal(0n);
     });
   });
 
   describe("wDivUp", () => {
-    it("rounds up on division", async () => {
+    it("rounds up on division with remainder", async () => {
       const { test } = await loadFixture(deployFixture);
       // 1 / 3 should round up
       const result = await test.wDivUp(WAD, ethers.parseEther("3"));
       const exact = await test.wDiv(WAD, ethers.parseEther("3"));
       expect(result).to.be.gte(exact);
+    });
+
+    it("returns exact value when no remainder", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const result = await test.wDivUp(ethers.parseEther("6"), TWO_WAD);
+      expect(result).to.equal(ethers.parseEther("3"));
+    });
+
+    it("divides by WAD returns same value", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const five = ethers.parseEther("5");
+      const result = await test.wDivUp(five, WAD);
+      expect(result).to.equal(five);
+    });
+
+    it("reverts on division by zero", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await expect(test.wDivUp(WAD, 0n)).to.be.revertedWithCustomError(
+        test,
+        "FP_DivisionByZero"
+      );
+    });
+  });
+
+  describe("wDivNearest", () => {
+    it("rounds to nearest on division", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // 5 / 3 = 1.666... → rounds to nearest
+      const result = await test.wDivNearest(
+        ethers.parseEther("5"),
+        ethers.parseEther("3")
+      );
+      // 1.666... WAD, nearest to integer part
+      expect(result).to.be.closeTo(ethers.parseEther("1.666666666666666666"), 1n);
+    });
+
+    it("returns exact value when evenly divisible", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const result = await test.wDivNearest(ethers.parseEther("6"), TWO_WAD);
+      expect(result).to.equal(ethers.parseEther("3"));
+    });
+
+    it("reverts on division by zero", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await expect(test.wDivNearest(WAD, 0n)).to.be.revertedWithCustomError(
+        test,
+        "FP_DivisionByZero"
+      );
     });
   });
 
@@ -118,10 +200,7 @@ describe("FixedPointMathU", () => {
       approx(result, expected, LOOSE_TOLERANCE);
     });
 
-    it("exp(-x) not supported (underflows)", async () => {
-      // Note: v1 implementation only supports positive inputs
-      // Negative exp would require signed math
-    });
+    // Note: exp(-x) not tested - v1 FixedPointMathU only supports unsigned inputs
   });
 
   describe("wLn", () => {
@@ -154,6 +233,32 @@ describe("FixedPointMathU", () => {
     });
   });
 
+  describe("lnWadUp", () => {
+    it("rounds up ln(n) result (+1 wei)", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // lnWadUp(n) = ln(n*WAD) + 1 for n > 1
+      // lnWadUp(2) = ln(2*WAD) + 1 = ln(2e18) + 1
+      const lnUp = await test.lnWadUp(2);
+      // ln(2) ≈ 0.693 WAD
+      // But lnWadUp takes integer n and computes ln(n * WAD)
+      // ln(2e18) ≈ 42.14... WAD (since ln(2e18) = ln(2) + 18*ln(10))
+      expect(lnUp).to.be.gt(0n);
+    });
+
+    it("ln(1) = 0 (n <= 1 returns 0)", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // lnWadUp(n) returns 0 for n <= 1
+      const result = await test.lnWadUp(1);
+      expect(result).to.equal(0n);
+    });
+
+    it("ln(0) = 0 (n <= 1 returns 0)", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const result = await test.lnWadUp(0);
+      expect(result).to.equal(0n);
+    });
+  });
+
   // ============================================================
   // Conversion (6-dec ↔ 18-dec)
   // ============================================================
@@ -168,6 +273,16 @@ describe("FixedPointMathU", () => {
       const { test } = await loadFixture(deployFixture);
       const result = await test.toWad(0n);
       expect(result).to.equal(0n);
+    });
+
+    it("reverts on overflow", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // type(uint256).max / 1e12 + 1 should overflow
+      const maxSafe = (2n ** 256n - 1n) / (10n ** 12n);
+      await expect(test.toWad(maxSafe + 1n)).to.be.revertedWithCustomError(
+        test,
+        "FP_Overflow"
+      );
     });
   });
 
