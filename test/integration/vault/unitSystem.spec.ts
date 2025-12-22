@@ -447,5 +447,20 @@ describe("UnitSystem Spec Tests", () => {
       // batchPrice should be in WAD
       expect(batchPrice).to.be.gt(WAD); // Price increased due to positive P&L
     });
+
+    it("vault shares is in WAD units", async () => {
+      const { owner, proxy } = await loadFixture(deployVaultFixture);
+
+      const seedAmountUsdc6 = 1_000_000_000n; // 1000 USDC (6 decimals)
+      await proxy.connect(owner).seedVault(seedAmountUsdc6);
+
+      const shares = await proxy.getVaultShares();
+
+      // Shares should be in WAD (1e18 scale)
+      // 1000 USDC at price 1.0 → 1000 WAD shares
+      const expectedSharesWad = ethers.parseEther("1000");
+      expect(shares).to.equal(expectedSharesWad);
+      expect(shares).to.be.gte(ethers.parseEther("1")); // At least 1 WAD
+    });
   });
 });

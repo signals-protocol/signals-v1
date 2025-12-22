@@ -338,5 +338,59 @@ describe("Escrow Security", () => {
       const market2 = await core.harnessGetMarket(marketId);
       expect(market2.settlementTick).to.equal(99);
     });
+
+    it("settlement below minTick clamps to minTick", async () => {
+      const { core, user1, owner, feePolicy } = await loadFixture(
+        deploySecurityFixture
+      );
+
+      const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+      const settlementTs = now + 1000;
+
+      // Create market with minTick = 50
+      const marketId = await core
+        .connect(owner)
+        .createMarketUniform.staticCall(
+          50, // minTick
+          100, // maxTick
+          1,
+          now - 100,
+          now + 500,
+          settlementTs,
+          50, // numBins
+          WAD,
+          feePolicy.target
+        );
+      await core
+        .connect(owner)
+        .createMarketUniform(50, 100, 1, now - 100, now + 500, settlementTs, 50, WAD, feePolicy.target);
+
+      await core
+        .connect(user1)
+        .openPosition(
+          marketId,
+          50,
+          60,
+          SMALL_QUANTITY,
+          ethers.parseUnits("1000", USDC_DECIMALS)
+        );
+
+      await time.setNextBlockTimestamp(settlementTs + 1);
+
+      // Submit settlement below minTick (price = 10, but minTick = 50)
+      const settlementPrice = tickToHumanPrice(10);
+      const payload = buildRedstonePayload(settlementPrice, settlementTs);
+      await submitWithPayload(core, owner, marketId, payload);
+
+      const opsEnd = settlementTs + 3600 + 3600;
+      await time.setNextBlockTimestamp(opsEnd + 1);
+
+      // Should succeed with clamped tick to minTick
+      await expect(core.connect(owner).finalizePrimarySettlement(marketId)).to
+        .not.be.reverted;
+
+      const market2 = await core.harnessGetMarket(marketId);
+      expect(market2.settlementTick).to.equal(50); // Clamped to minTick
+    });
   });
 });

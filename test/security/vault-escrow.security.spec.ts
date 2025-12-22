@@ -153,7 +153,7 @@ describe("Vault Escrow Security", () => {
   // ============================================================
   describe("CRITICAL-02: Batch Processing Before Market Finalized", () => {
     it("reverts processDailyBatch when batch market is not settled", async () => {
-      const { core, attacker } = await loadFixture(deploySecurityFixture);
+      const { core, attacker, lpVaultModule } = await loadFixture(deploySecurityFixture);
       
       const currentBatchId = await core.currentBatchId();
       const targetBatchId = currentBatchId + 1n;
@@ -174,7 +174,8 @@ describe("Vault Escrow Security", () => {
       // This should revert to prevent settlement DoS
       await expect(
         core.connect(attacker).processDailyBatch(targetBatchId)
-      ).to.be.reverted; // Should revert with BatchMarketNotSettled after fix
+      ).to.be.revertedWithCustomError(lpVaultModule, "BatchMarketNotSettled")
+        .withArgs(targetBatchId, marketId);
     });
 
     it("allows processDailyBatch after market is finalized", async () => {
@@ -259,7 +260,7 @@ describe("Vault Escrow Security", () => {
   // ============================================================
   describe("CRITICAL-03: Cancel After Batch Processed", () => {
     it("reverts cancelDeposit after batch is processed", async () => {
-      const { core, user1 } = await loadFixture(deploySecurityFixture);
+      const { core, user1, lpVaultModule } = await loadFixture(deploySecurityFixture);
       
       // Create deposit request
       const depositAmount = ethers.parseUnits("1000", USDC_DECIMALS);
@@ -272,15 +273,16 @@ describe("Vault Escrow Security", () => {
       await time.setNextBlockTimestamp(Number(batchEndTime) + 1);
       await core.processDailyBatch(eligibleBatchId);
       
-      // Try to cancel after batch processed - should revert
+      // Try to cancel after batch processed - should revert with CancelTooLate
       // Request ID 0 for first deposit request
       await expect(
         core.connect(user1).cancelDeposit(0)
-      ).to.be.reverted; // Should revert with CancelTooLate after fix
+      ).to.be.revertedWithCustomError(lpVaultModule, "CancelTooLate")
+        .withArgs(0n, eligibleBatchId);
     });
 
     it("reverts cancelWithdraw after batch is processed", async () => {
-      const { core, user1, lpShare } = await loadFixture(deploySecurityFixture);
+      const { core, user1, lpShare, lpVaultModule } = await loadFixture(deploySecurityFixture);
       
       // First deposit and claim to get shares
       const depositAmount = ethers.parseUnits("1000", USDC_DECIMALS);
@@ -313,11 +315,12 @@ describe("Vault Escrow Security", () => {
         nextBatch++;
       }
       
-      // Try to cancel after batch processed - should revert
+      // Try to cancel after batch processed - should revert with CancelTooLate
       // Request ID 0 for first withdraw request
       await expect(
         core.connect(user1).cancelWithdraw(0)
-      ).to.be.reverted; // Should revert with CancelTooLate after fix
+      ).to.be.revertedWithCustomError(lpVaultModule, "CancelTooLate")
+        .withArgs(0n, eligibleBatchId);
     });
 
     it("allows cancel before batch is processed", async () => {
@@ -337,6 +340,51 @@ describe("Vault Escrow Security", () => {
       // Funds should be returned
       const balanceAfter = await payment.balanceOf(user1.address);
       expect(balanceAfter).to.equal(balanceBefore);
+    });
+
+    it("reverts cancel by non-owner (RequestNotOwned)", async () => {
+      const { core, user1, user2, lpVaultModule } = await loadFixture(deploySecurityFixture);
+      
+      // user1 creates deposit request
+      const depositAmount = ethers.parseUnits("1000", USDC_DECIMALS);
+      await core.connect(user1).requestDeposit(depositAmount);
+      
+      // user2 tries to cancel user1's request
+      await expect(
+        core.connect(user2).cancelDeposit(0)
+      ).to.be.revertedWithCustomError(lpVaultModule, "RequestNotOwned")
+        .withArgs(0n, user1.address, user2.address);
+    });
+
+    it("reverts claim by non-owner (RequestNotOwned)", async () => {
+      const { core, user1, user2, lpVaultModule } = await loadFixture(deploySecurityFixture);
+      
+      // user1 creates deposit request
+      const depositAmount = ethers.parseUnits("1000", USDC_DECIMALS);
+      await core.connect(user1).requestDeposit(depositAmount);
+      
+      // Process batch
+      const currentBatchId = await core.currentBatchId();
+      const eligibleBatchId = currentBatchId + 1n;
+      const batchEndTime = (eligibleBatchId + 1n) * BATCH_SECONDS;
+      await time.setNextBlockTimestamp(Number(batchEndTime) + 1);
+      await core.processDailyBatch(eligibleBatchId);
+      
+      // user2 tries to claim user1's deposit
+      await expect(
+        core.connect(user2).claimDeposit(0)
+      ).to.be.revertedWithCustomError(lpVaultModule, "RequestNotOwned")
+        .withArgs(0n, user1.address, user2.address);
+    });
+
+    it("reverts claim for non-existent request (RequestNotFound)", async () => {
+      const { core, user1, lpVaultModule } = await loadFixture(deploySecurityFixture);
+      
+      // Try to claim request that doesn't exist
+      await expect(
+        core.connect(user1).claimDeposit(999)
+      ).to.be.revertedWithCustomError(lpVaultModule, "RequestNotFound")
+        .withArgs(999n);
     });
   });
 

@@ -125,6 +125,20 @@ async function deploySystem(
 }
 
 describe("TradeModule parity and multi-user flows", () => {
+  it("matches open cost with view quote", async () => {
+    const { userA, payment, position, core } = await deploySystem();
+
+    const quote = await core.calculateOpenCost.staticCall(1, 0, 4, 2_000);
+    const balBefore = await payment.balanceOf(userA.address);
+    const nextId = await position.nextId();
+    await core.connect(userA).openPosition(1, 0, 4, 2_000, quote + 100n); // add small buffer
+    const balAfter = await payment.balanceOf(userA.address);
+
+    // Actual cost should match quote exactly
+    expect(balBefore - balAfter).to.equal(quote);
+    expect(await position.exists(nextId)).to.equal(true);
+  });
+
   it("matches decrease proceeds with view quote", async () => {
     const { userA, payment, position, core } = await deploySystem();
 

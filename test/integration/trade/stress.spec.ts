@@ -24,18 +24,64 @@ describe("TradeModule stress and boundary scenarios", () => {
 
     const market = await core.markets(1);
     expect(Number(market.openPositionCount)).to.equal(totalOps);
-    // close half randomly
-    for (let i = 1; i <= totalOps; i += 2) {
-      await position.getPosition(i); // Ensure position exists
-      const ownerIdx = Number(rand(users.length));
-      const owner = users[ownerIdx];
-      // skip if owner mismatch, just attempt and tolerate revert by catching
-      try {
-        await core.connect(owner).closePosition(i, 0);
-      } catch {
-        // ignore failed close due to ownership; count unaffected
-      }
+
+    // Track position owners properly for reliable closing
+    const positionOwners: Record<number, typeof users[0]> = {};
+    
+    // Re-deploy for clean test with tracked ownership
+    const { users: u2, core: c2 } = await deployLargeBinSystem(128);
+    let id = 1;
+    let seed2 = 424242;
+    const rand2 = (max: number) => {
+      seed2 = (seed2 * 1664525 + 1013904223) % 0xffffffff;
+      return seed2 % max;
+    };
+    
+    // Open positions with tracked ownership
+    const ops = 50;
+    for (let i = 0; i < ops; i++) {
+      const userIdx = rand2(u2.length);
+      const user = u2[userIdx];
+      const lower = rand2(127);
+      const upper = lower + 1 + rand2(128 - lower - 1);
+      const qty = BigInt(500 + rand2(1_000));
+      await c2.connect(user).openPosition(1, lower, upper, qty, 50_000_000);
+      positionOwners[id] = user;
+      id++;
     }
+    
+    expect(Number((await c2.markets(1)).openPositionCount)).to.equal(ops);
+    
+    // Close all positions with correct owners
+    let closedCount = 0;
+    for (let i = 1; i <= ops; i++) {
+      const owner = positionOwners[i];
+      await c2.connect(owner).closePosition(i, 0);
+      closedCount++;
+    }
+    
+    // Verify all positions closed
+    const finalMarket = await c2.markets(1);
+    expect(Number(finalMarket.openPositionCount)).to.equal(0);
+    expect(closedCount).to.equal(ops);
+  });
+
+  it("handles extreme quantity values", async () => {
+    const { users, core, position } = await deployTradeModuleSystem({
+      markets: [{ numBins: 4, tickSpacing: 1, minTick: 0, maxTick: 4 }],
+      userCount: 1,
+      fundAmount: ethers.parseUnits("10000000", 6), // 10M USDC
+    });
+    
+    const user = users[0];
+    
+    // Large quantity trade
+    const largeQty = 1_000_000n;
+    const quote = await core.calculateOpenCost.staticCall(1, 0, 4, largeQty);
+    await core.connect(user).openPosition(1, 0, 4, largeQty, quote * 2n);
+    
+    const posInfo = await position.getPosition(1);
+    expect(posInfo.quantity).to.equal(largeQty);
   });
 
   it("reverts trades after market expiry and honors slippage near endTimestamp", async () => {

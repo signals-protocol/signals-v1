@@ -105,6 +105,40 @@ describe("Vault Security", () => {
   }
 
   // ============================================================
+  // Vault Seeding Security
+  // ============================================================
+  describe("Vault seeding security", () => {
+    it("reverts requestDeposit before vault is seeded (VaultNotSeeded)", async () => {
+      const { proxy, userB, module } = await loadFixture(deployVaultFixture);
+      
+      // Vault is not seeded yet
+      await expect(
+        proxy.connect(userB).requestDeposit(usdc("100"))
+      ).to.be.revertedWithCustomError(module, "VaultNotSeeded");
+    });
+
+    it("reverts requestWithdraw before vault is seeded (VaultNotSeeded)", async () => {
+      const { proxy, userB, module } = await loadFixture(deployVaultFixture);
+      
+      await expect(
+        proxy.connect(userB).requestWithdraw(ethers.parseEther("100"))
+      ).to.be.revertedWithCustomError(module, "VaultNotSeeded");
+    });
+
+    it("reverts double seeding (VaultAlreadySeeded)", async () => {
+      const { proxy, userA, module } = await loadFixture(deployVaultFixture);
+      
+      // First seed
+      await proxy.connect(userA).seedVault(usdc("1000"));
+      
+      // Second seed should fail
+      await expect(
+        proxy.connect(userA).seedVault(usdc("1000"))
+      ).to.be.revertedWithCustomError(module, "VaultAlreadySeeded");
+    });
+  });
+
+  // ============================================================
   // CRITICAL-01: cancelDeposit after batch processed
   // ============================================================
   describe("CRITICAL-01: cancelDeposit after batch processed", () => {

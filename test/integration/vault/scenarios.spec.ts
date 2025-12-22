@@ -454,5 +454,71 @@ describe("LP Vault Scenarios", () => {
           : priceBeforeRun - priceAfterRun;
       expect(priceDiff).to.be.lte(ethers.parseEther("0.001")); // < 0.1% change
     });
+
+    it("prevents withdrawal that would brick vault (MIN_DEAD_SHARES)", async () => {
+      const { proxy, userA, module, firstBatchId } = await loadFixture(
+        deploySeededVaultFixture
+      );
+      const day1 = firstBatchId;
+      const day2 = day1 + 1n;
+
+      const totalShares = await proxy.getVaultShares();
+      const minDeadShares = await proxy.MIN_DEAD_SHARES();
+
+      // Request withdrawal of almost all shares (leaving less than MIN_DEAD_SHARES)
+      const withdrawAmount = totalShares - minDeadShares + 1n;
+      await proxy.connect(userA).requestWithdraw(withdrawAmount);
+
+      // Process batch should revert
+      await proxy.harnessRecordPnl(day1, 0n, 0n, ethers.parseEther("500"));
+      await advancePastBatchEnd(day1);
+
+      // Need to process day2 for withdrawal to be eligible (D_lag = 1)
+      await proxy.processDailyBatch(day1);
+      await proxy.harnessRecordPnl(day2, 0n, 0n, ethers.parseEther("500"));
+      await advancePastBatchEnd(day2);
+
+      await expect(
+        proxy.processDailyBatch(day2)
+      ).to.be.revertedWithCustomError(module, "WithdrawalWouldBrickVault");
+    });
+  });
+
+  // ============================================================
+  // Scenario 4: Fee Distribution
+  // ============================================================
+  describe("Scenario: Fee Distribution", () => {
+    it("distributes fees correctly to LP/BS/TR per phi config", async () => {
+      const { proxy, firstBatchId } = await loadFixture(
+        deploySeededVaultFixture
+      );
+      const day1 = firstBatchId;
+
+      const navBefore = await proxy.getVaultNav();
+      const [backstopBefore, treasuryBefore] = await proxy.getCapitalStack();
+
+      // Generate fees: Ftot = 1000 WAD
+      // With phi: LP=80%, BS=10%, TR=10%
+      // LP gets: 800, BS gets: 100, TR gets: 100
+      const fees = ethers.parseEther("1000");
+      await proxy.harnessRecordPnl(day1, 0n, fees, ethers.parseEther("500"));
+      await advancePastBatchEnd(day1);
+      await proxy.processDailyBatch(day1);
+
+      const navAfter = await proxy.getVaultNav();
+      const [backstopAfter, treasuryAfter] = await proxy.getCapitalStack();
+
+      // LP NAV increase = Ftot * phiLP = 1000 * 0.8 = 800
+      const navIncrease = navAfter - navBefore;
+      expect(navIncrease).to.be.closeTo(ethers.parseEther("800"), ethers.parseEther("10"));
+
+      // Backstop increase = Ftot * phiBS = 1000 * 0.1 = 100
+      const bsIncrease = backstopAfter - backstopBefore;
+      expect(bsIncrease).to.be.closeTo(ethers.parseEther("100"), ethers.parseEther("10"));
+
+      // Treasury increase = Ftot * phiTR = 1000 * 0.1 = 100
+      const trIncrease = treasuryAfter - treasuryBefore;
+      expect(trIncrease).to.be.closeTo(ethers.parseEther("100"), ethers.parseEther("10"));
+    });
   });
 });

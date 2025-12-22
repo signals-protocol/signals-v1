@@ -331,10 +331,10 @@ describe("VaultWithMarkets E2E", () => {
       expect(processed).to.equal(true);
     });
 
-    it("GrantExceedsTailBudget reverts batch when grantNeed > ΔEₜ (simulated)", async () => {
-      // This test verifies FeeWaterfallLib's grant cap behavior
-      // Full integration is covered by FeeWaterfallLib unit tests.
-
+    it("single market per batch: ΔEₜ is stored and used in grant cap", async () => {
+      // E2E verification that market's deltaEt is correctly stored and used
+      // in the fee waterfall's grant cap calculation during batch processing.
+      // Note: System enforces ONE market per batch (BatchAlreadyHasMarket invariant).
       const { seeder, core, payment } = await loadFixture(deploySystem);
 
       const latest = BigInt(await time.latest());
@@ -348,8 +348,47 @@ describe("VaultWithMarkets E2E", () => {
       await time.setNextBlockTimestamp(Number(seedTime));
       await core.connect(seeder).seedVault(seedAmount);
 
-      // Test passes if setup completes without error, demonstrating wiring
-      expect(true).to.equal(true);
+      // Increase backstopNav for prior admissibility
+      await core.setCapitalStack(ethers.parseEther("10000"), 0n);
+
+      // Create market with concentrated prior (ΔEₜ > 0)
+      const tSet = seedTime + 500n;
+      const batchId = tSet / BATCH_SECONDS;
+      
+      const factors = Array(10).fill(WAD);
+      factors[0] = 2n * WAD; // 2x weight on first bin
+      await core.createMarket(
+        0, 100, 10,
+        Number(seedTime + 100n), Number(tSet - 100n), Number(tSet),
+        10, ethers.parseEther("100"),
+        ethers.ZeroAddress, factors
+      );
+
+      // Verify market has deltaEt > 0
+      const market = await core.harnessGetMarket(1n);
+      expect(market.deltaEt).to.be.gt(0n);
+
+      // Settle market
+      const priceTimestamp = tSet + 1n;
+      await time.setNextBlockTimestamp(Number(priceTimestamp));
+      const payload = buildRedstonePayload(tickToHumanPrice(50n), Number(priceTimestamp), authorisedWallets);
+      await submitWithPayload(core, seeder, 1n, payload);
+
+      const opsEnd = tSet + 300n + 60n;
+      await time.setNextBlockTimestamp(Number(opsEnd + 1n));
+      await core.finalizePrimarySettlement(1n);
+
+      // Process batch
+      await advancePastBatchEnd(batchId);
+      await expect(core.processDailyBatch(batchId)).to.not.be.reverted;
+
+      const [, , , , , , processed] = await core.getDailyPnl.staticCall(batchId);
+      expect(processed).to.equal(true);
     });
+
+    // Note: 
+    // 1. System enforces ONE market per batch (BatchAlreadyHasMarket invariant).
+    // 2. GrantExceedsTailBudget revert is covered exhaustively in
+    //    test/unit/lib/feeWaterfallLib.spec.ts (INV-FW4 tests).
   });
 });

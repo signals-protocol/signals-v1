@@ -351,4 +351,76 @@ describe("TradeModule flow (minimal parity)", () => {
     await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000)).to
       .be.reverted;
   });
+
+  it("calculateDecreaseProceeds matches actual credit", async () => {
+    const { user, core, payment, position } = await deploySystem();
+    
+    // Open position
+    const nextId = await position.nextId();
+    const positionId = Number(nextId);
+    await core.connect(user).openPosition(1, 0, 4, 2_000, 10_000_000);
+    
+    // Quote decrease proceeds (positionId, quantity)
+    const decreaseProceeds = await core.calculateDecreaseProceeds.staticCall(positionId, 500);
+    const balBefore = await payment.balanceOf(user.address);
+    await core.connect(user).decreasePosition(positionId, 500, 0);
+    const balAfter = await payment.balanceOf(user.address);
+    
+    expect(balAfter - balBefore).to.equal(decreaseProceeds);
+  });
+
+  it("reverts trade after market end", async () => {
+    const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+    const { user, core } = await deploySystem({
+      startTimestamp: now - 1000,
+      endTimestamp: now - 100, // Ended in the past
+    });
+    
+    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000))
+      .to.be.reverted;
+  });
+
+  it("reverts trade before market start", async () => {
+    const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+    const { user, core } = await deploySystem({
+      startTimestamp: now + 1000, // Starts in the future
+      endTimestamp: now + 2000,
+    });
+    
+    await expect(core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000))
+      .to.be.reverted;
+  });
+
+  it("reverts decrease more than owned quantity", async () => {
+    const { user, core, position } = await deploySystem();
+    const tradeModule = (await ethers.getContractAt(
+      "TradeModule",
+      await core.module()
+    )) as unknown as TradeModule;
+    
+    const nextId = await position.nextId();
+    const positionId = Number(nextId);
+    await core.connect(user).openPosition(1, 0, 4, 1_000, 5_000_000);
+    
+    // Try to decrease more than owned
+    await expect(
+      core.connect(user).decreasePosition(positionId, 2_000, 0)
+    ).to.be.revertedWithCustomError(tradeModule, "InsufficientPositionQuantity");
+  });
+
+  it("reverts operations on non-existent position", async () => {
+    const { user, core } = await deploySystem();
+    
+    // Try to increase non-existent position
+    await expect(core.connect(user).increasePosition(999, 500, 5_000_000))
+      .to.be.reverted;
+    
+    // Try to decrease non-existent position
+    await expect(core.connect(user).decreasePosition(999, 500, 0))
+      .to.be.reverted;
+    
+    // Try to close non-existent position
+    await expect(core.connect(user).closePosition(999, 0))
+      .to.be.reverted;
+  });
 });

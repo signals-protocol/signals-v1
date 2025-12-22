@@ -592,6 +592,98 @@ describe("PayoutReserve Spec Tests", () => {
       // Core balance decreased by exactly expectedTotalPayout
       expect(balanceBefore - balanceAfter).to.equal(expectedTotalPayout);
     });
+
+    it("reverts double claim on same position", async () => {
+      const { core, seeder, trader, position } = await loadFixture(
+        deployFullSystem
+      );
+
+      const { marketId, tSet, batchId } = await setupMarketWithPosition(
+        core,
+        seeder
+      );
+
+      // Create winning position
+      const positionId = 1n;
+      await position.mockMint(trader.address, positionId, marketId, 0, 2, 500n);
+      await core.harnessAddExposure(marketId, 0, 2, 500n);
+
+      // Settle
+      const priceTimestamp = tSet + 1n;
+      await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
+      const payload = buildRedstonePayload(
+        tickToHumanPrice(1n),
+        Number(priceTimestamp)
+      );
+      await submitWithPayload(core, seeder, marketId, payload);
+      const opsEnd = tSet + 300n + 60n;
+      await time.setNextBlockTimestamp(Number(opsEnd + 1n));
+      await core.finalizePrimarySettlement(marketId);
+
+      // Process batch
+      await advancePastBatchEnd(batchId);
+      await core.processDailyBatch(batchId);
+
+      // First claim succeeds
+      await core.connect(trader).claimPayout(positionId);
+
+      // Second claim should revert - position was burned on first claim
+      await expect(core.connect(trader).claimPayout(positionId)).to.be.reverted;
+    });
+
+    it("reverts claim by non-owner", async () => {
+      const { core, seeder, trader, owner, position } = await loadFixture(
+        deployFullSystem
+      );
+
+      const { marketId, tSet, batchId } = await setupMarketWithPosition(
+        core,
+        seeder
+      );
+
+      // Create position owned by trader
+      const positionId = 1n;
+      await position.mockMint(trader.address, positionId, marketId, 0, 2, 500n);
+      await core.harnessAddExposure(marketId, 0, 2, 500n);
+
+      // Settle and process
+      const priceTimestamp = tSet + 1n;
+      await time.setNextBlockTimestamp(Number(priceTimestamp + 1n));
+      const payload = buildRedstonePayload(
+        tickToHumanPrice(1n),
+        Number(priceTimestamp)
+      );
+      await submitWithPayload(core, seeder, marketId, payload);
+      const opsEnd = tSet + 300n + 60n;
+      await time.setNextBlockTimestamp(Number(opsEnd + 1n));
+      await core.finalizePrimarySettlement(marketId);
+      await advancePastBatchEnd(batchId);
+      await core.processDailyBatch(batchId);
+
+      // owner tries to claim trader's position - should revert with not owner check
+      await expect(core.connect(owner).claimPayout(positionId)).to.be.reverted;
+    });
+
+    it("reverts claim on unsettled market", async () => {
+      const { core, seeder, trader, position, trade } = await loadFixture(
+        deployFullSystem
+      );
+
+      const { marketId } = await setupMarketWithPosition(core, seeder);
+
+      // Create position but DON'T settle
+      const positionId = 1n;
+      await position.mockMint(trader.address, positionId, marketId, 0, 2, 500n);
+      await core.harnessAddExposure(marketId, 0, 2, 500n);
+
+      // Advance past claim window but without settlement
+      await time.increase(86400);
+
+      // Claim should revert because market is not settled
+      await expect(
+        core.connect(trader).claimPayout(positionId)
+      ).to.be.revertedWithCustomError(trade, "MarketNotSettled");
+    });
   });
 
   // ==================================================================

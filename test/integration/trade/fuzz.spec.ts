@@ -3,7 +3,7 @@ import { deployMultiMarketSystem } from "../../helpers/deploy";
 
 describe("TradeModule randomized multi-market flows", () => {
   it("maintains openPositionCount and position existence across random ops", async () => {
-    const { users, core, payment } = await deployMultiMarketSystem();
+    const { users, core, payment, position: positionContract } = await deployMultiMarketSystem();
     
     // Fund users with smaller amounts for this test
     for (const u of users) {
@@ -84,5 +84,56 @@ describe("TradeModule randomized multi-market flows", () => {
       const market = await core.markets(marketId);
       expect(Number(market.openPositionCount)).to.equal(aliveCount);
     }
+
+    // verify position NFT existence matches alive state (using same position contract)
+    for (const [id, pos] of Object.entries(positions)) {
+      const exists = await positionContract.exists(Number(id));
+      expect(exists).to.equal(pos.alive, `Position ${id} existence mismatch: expected ${pos.alive}, got ${exists}`);
+    }
+  });
+
+  it("preserves position quantity after random increase/decrease", async () => {
+    const { users, core, payment, position: positionContract } = await deployMultiMarketSystem();
+    
+    for (const u of users) {
+      await payment.transfer(u.address, 50_000_000n);
+    }
+
+    const user = users[0];
+    const marketId = 1;
+    const initialQty = 1000n;
+    
+    // Open position
+    await core.connect(user).openPosition(marketId, 0, 4, initialQty, 20_000_000);
+    const positionId = 1n;
+    
+    // Perform random increases and decreases
+    let expectedQty = initialQty;
+    let seed = 12345;
+    const rand = (max: number) => {
+      seed = (seed * 1664525 + 1013904223) % 0xffffffff;
+      return seed % max;
+    };
+    
+    for (let i = 0; i < 20; i++) {
+      const op = rand(2);
+      if (op === 0) {
+        // Increase
+        const addQty = BigInt(100 + rand(300));
+        await core.connect(user).increasePosition(positionId, addQty, 20_000_000);
+        expectedQty += addQty;
+      } else {
+        // Decrease
+        if (expectedQty > 100n) {
+          const decQty = BigInt(rand(Number(expectedQty / 2n)) + 1);
+          await core.connect(user).decreasePosition(positionId, decQty, 0);
+          expectedQty -= decQty;
+        }
+      }
+    }
+    
+    // Verify final quantity matches expectation
+    const posInfo = await positionContract.getPosition(positionId);
+    expect(posInfo.quantity).to.equal(expectedQty);
   });
 });

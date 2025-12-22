@@ -430,6 +430,118 @@ describe("α Safety Bound Enforcement (Integration)", () => {
     });
   });
 
+  describe("Edge Cases: Risk Parameter Boundaries", () => {
+    it("reverts market creation when numBins = 1", async () => {
+      const now = await time.latest();
+
+      // numBins = 1 should revert with InvalidNumBins
+      await expect(
+        core.createMarketUniform(
+          0,
+          10,
+          10, // tickSpacing = 10, maxTick - minTick = 10 → 1 bin
+          now + 60,
+          now + 3600,
+          now + 3660,
+          1, // numBins = 1
+          ethers.parseEther("100"),
+          ethers.ZeroAddress
+        )
+      ).to.be.revertedWithCustomError(risk, "InvalidNumBins");
+    });
+
+    it("allows market creation with numBins = 2 (minimum valid)", async () => {
+      const now = await time.latest();
+
+      // numBins = 2 should work
+      await expect(
+        core.createMarketUniform(
+          0,
+          20,
+          10,
+          now + 60,
+          now + 3600,
+          now + 3660,
+          2, // numBins = 2
+          ethers.parseEther("100"),
+          ethers.ZeroAddress
+        )
+      ).to.not.be.reverted;
+    });
+
+    it("rejects setRiskConfig when lambda = 0", async () => {
+      // lambda = 0 is not allowed (InvalidLambda)
+      await expect(
+        core.setRiskConfig(0n, ethers.parseEther("1"), true)
+      ).to.be.revertedWithCustomError(core, "InvalidLambda");
+    });
+
+    it("ignores drawdown when kDrawdown = 0", async () => {
+      const WAD = ethers.parseEther("1");
+
+      // Set k = 0 → αlimit = αbase regardless of drawdown
+      await core.setRiskConfig(
+        ethers.parseEther("0.3"),
+        0n, // k = 0
+        true
+      );
+
+      // Simulate 50% drawdown
+      await core.harnessSetLpVault(
+        ethers.parseEther("10000"),
+        ethers.parseEther("10000"),
+        WAD / 2n, // price = 0.5 (50% drawdown)
+        WAD, // pricePeak = 1
+        true
+      );
+
+      const now = await time.latest();
+
+      // With k = 0, αlimit = αbase ≈ 651 (no drawdown penalty)
+      // α = 500 should still work
+      await expect(
+        core.createMarketUniform(
+          0,
+          1000,
+          10,
+          now + 60,
+          now + 3600,
+          now + 3660,
+          100,
+          ethers.parseEther("500"),
+          ethers.ZeroAddress
+        )
+      ).to.not.be.reverted;
+    });
+
+    it("rejects baseFactors with zero element", async () => {
+      const now = await time.latest();
+      const WAD = ethers.parseEther("1");
+
+      // Factor array with a zero → should revert with InvalidFactor
+      const factorsWithZero = Array(10).fill(WAD);
+      factorsWithZero[5] = 0n;
+
+      await core.setCapitalStack(ethers.parseEther("1000"), 0n);
+
+      // Should revert since zero factor is not allowed
+      await expect(
+        core.createMarket(
+          0,
+          100,
+          10,
+          now + 60,
+          now + 3600,
+          now + 3660,
+          10,
+          ethers.parseEther("100"),
+          ethers.ZeroAddress,
+          factorsWithZero
+        )
+      ).to.be.revertedWithCustomError(lifecycle, "InvalidFactor");
+    });
+  });
+
   describe("Prior Admissibility (ΔEₜ ≤ backstopNav)", () => {
     const WAD = ethers.parseEther("1");
 
@@ -564,40 +676,22 @@ describe("α Safety Bound Enforcement (Integration)", () => {
     });
   });
 
-  describe("ΔEₜ as Grant Cap (E2E)", () => {
+  describe("ΔEₜ Storage Validation", () => {
     /**
-     * E2E test for ΔEₜ → grant cap flow
-     *
-     * Scenario:
-     * 1. Create market with concentrated prior → ΔEₜ > 0
-     * 2. Record loss to batch (Lt < 0) that requires grant
-     * 3. Process batch → FeeWaterfallLib enforces grantNeed ≤ ΔEₜ
+     * Tests that ΔEₜ is correctly calculated and stored in market struct.
+     * The actual grant cap enforcement is tested in batch processing tests.
      */
-    it("batch reverts when grantNeed exceeds ΔEₜ from market", async () => {
+    it("stores ΔEₜ > 0 for concentrated prior", async () => {
       const now = await time.latest();
       const WAD = ethers.parseEther("1");
 
       // Create concentrated prior: first bin has 2x weight
-      // ΔEₜ = 100 * ln(11/10) ≈ 9.53 WAD
+      // ΔEₜ = α * ln(rootSum / (n * minFactor))
+      // = 100 * ln(11 / 10) ≈ 9.53 WAD
       const concentratedFactors = Array(10).fill(WAD);
       concentratedFactors[0] = 2n * WAD;
 
-      // Set backstopNav high enough for prior admissibility
       await core.setCapitalStack(ethers.parseEther("1000"), 0n);
-
-      // Create market with concentrated prior
-      const marketId = await core.createMarket.staticCall(
-        0,
-        100,
-        10,
-        now + 60,
-        now + 3600,
-        now + 3660,
-        10,
-        ethers.parseEther("100"), // α = 100 → ΔEₜ ≈ 9.53 WAD
-        ethers.ZeroAddress,
-        concentratedFactors
-      );
 
       await core.createMarket(
         0,
@@ -607,40 +701,26 @@ describe("α Safety Bound Enforcement (Integration)", () => {
         now + 3600,
         now + 3660,
         10,
-        ethers.parseEther("100"),
+        ethers.parseEther("100"), // α = 100
         ethers.ZeroAddress,
         concentratedFactors
       );
 
-      // Verify market has ΔEₜ stored
-      const market = await core.harnessGetMarket(marketId);
+      const market = await core.harnessGetMarket(1n);
       expect(market.deltaEt).to.be.gt(0n);
-      // ΔEₜ should be around 9.53 WAD
-      expect(market.deltaEt).to.be.lt(ethers.parseEther("15")); // Sanity check
-
-      // Now test the grant cap: if grantNeed > ΔEₜ, batch should revert
-      // This requires processing a batch with loss that exceeds the tail budget
-      // The batch would need Lt such that grantNeed = max(0, Nfloor - Nraw) > ΔEₜ
-
-      // With NAV = 10000 WAD, pdd = -30%, Nfloor = 10000 * 0.7 = 7000 WAD
-      // If Nraw = 6990 WAD (due to loss), grantNeed = 7000 - 6990 = 10 WAD
-      // But market's ΔEₜ ≈ 9.53 WAD < 10 WAD → should revert
-
-      // This test demonstrates the connection between market ΔEₜ and batch grant cap
-      // Full E2E would require market settlement + batch processing
+      // ln(1.1) ≈ 0.0953, so ΔEₜ ≈ 100 * 0.0953 ≈ 9.53 WAD
+      expect(market.deltaEt).to.be.gte(ethers.parseEther("9"));
+      expect(market.deltaEt).to.be.lt(ethers.parseEther("15"));
     });
 
-    it("batch succeeds when grantNeed ≤ ΔEₜ", async () => {
+    it("stores ΔEₜ = 0 for uniform prior", async () => {
       const now = await time.latest();
       const WAD = ethers.parseEther("1");
 
-      // Create uniform prior → ΔEₜ = 0
       const uniformFactors = Array(10).fill(WAD);
 
-      // Set backstopNav for the batch (will be summed as ΔEₜ in real flow)
       await core.setCapitalStack(ethers.parseEther("1000"), 0n);
 
-      // Create market with uniform prior
       await core.createMarket(
         0,
         100,
@@ -654,11 +734,55 @@ describe("α Safety Bound Enforcement (Integration)", () => {
         uniformFactors
       );
 
-      // Uniform prior → ΔEₜ = 0
-      // If no loss occurs (Lt = 0), grantNeed = 0
-      // 0 ≤ 0, so batch should succeed
+      const market = await core.harnessGetMarket(1n);
+      expect(market.deltaEt).to.equal(0n);
+    });
 
-      // This test verifies uniform priors don't require backstop support
+    it("ΔEₜ scales proportionally with α", async () => {
+      const now = await time.latest();
+      const WAD = ethers.parseEther("1");
+
+      const concentratedFactors = Array(10).fill(WAD);
+      concentratedFactors[0] = 2n * WAD;
+
+      await core.setCapitalStack(ethers.parseEther("10000"), 0n);
+
+      // Market 1: α = 100
+      await core.createMarket(
+        0,
+        100,
+        10,
+        now + 60,
+        now + 3600,
+        now + 3660,
+        10,
+        ethers.parseEther("100"),
+        ethers.ZeroAddress,
+        concentratedFactors
+      );
+
+      // Market 2: α = 200 (different batch)
+      await core.createMarket(
+        200,
+        300,
+        10,
+        now + 86400 + 60,
+        now + 86400 + 3600,
+        now + 86400 + 3660,
+        10,
+        ethers.parseEther("200"),
+        ethers.ZeroAddress,
+        concentratedFactors
+      );
+
+      const market1 = await core.harnessGetMarket(1n);
+      const market2 = await core.harnessGetMarket(2n);
+
+      // ΔEₜ should roughly double with α
+      // Allow 5% tolerance for rounding
+      const ratio = (market2.deltaEt * 100n) / market1.deltaEt;
+      expect(ratio).to.be.gte(195n);
+      expect(ratio).to.be.lte(205n);
     });
   });
 

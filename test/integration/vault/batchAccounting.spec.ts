@@ -213,6 +213,40 @@ describe("BatchAccounting Spec Tests", () => {
         proxy.processDailyBatch(batchId)
       ).to.be.revertedWithCustomError(module, "BatchNotReady");
     });
+
+    it("cancelDeposit does NOT change NAV or Shares", async () => {
+      const { proxy, userA } = await loadFixture(deploySeededVaultFixture);
+
+      await proxy.connect(userA).requestDeposit(usdc("500"));
+
+      const navBefore = await proxy.getVaultNav();
+      const sharesBefore = await proxy.getVaultShares();
+
+      await proxy.connect(userA).cancelDeposit(0n);
+
+      const navAfter = await proxy.getVaultNav();
+      const sharesAfter = await proxy.getVaultShares();
+
+      expect(navAfter).to.equal(navBefore, "NAV changed on cancelDeposit");
+      expect(sharesAfter).to.equal(sharesBefore, "Shares changed on cancelDeposit");
+    });
+
+    it("cancelWithdraw does NOT change NAV or Shares", async () => {
+      const { proxy, owner } = await loadFixture(deploySeededVaultFixture);
+
+      await proxy.connect(owner).requestWithdraw(ethers.parseEther("200"));
+
+      const navBefore = await proxy.getVaultNav();
+      const sharesBefore = await proxy.getVaultShares();
+
+      await proxy.connect(owner).cancelWithdraw(0n);
+
+      const navAfter = await proxy.getVaultNav();
+      const sharesAfter = await proxy.getVaultShares();
+
+      expect(navAfter).to.equal(navBefore, "NAV changed on cancelWithdraw");
+      expect(sharesAfter).to.equal(sharesBefore, "Shares changed on cancelWithdraw");
+    });
   });
 
   // ================================================================
@@ -287,6 +321,33 @@ describe("BatchAccounting Spec Tests", () => {
       expect(npre).to.equal(N_prev);
       expect(ft).to.equal(0n);
       expect(gt).to.equal(0n);
+    });
+
+    it("N^pre_t - N_{t-1} = L_t + F_t + G_t (negative P&L without grant, above floor)", async () => {
+      const { proxy, currentBatchId } = await loadFixture(
+        deploySeededVaultFixture
+      );
+
+      const N_prev = await proxy.getVaultNav();
+      const batchId = currentBatchId + 1n;
+
+      // Small negative P&L that stays above drawdown floor (pdd = -30%)
+      // -10% loss doesn't trigger grant because Nraw > Nfloor
+      const Lt = ethers.parseEther("-100"); // -10% of 1000 WAD
+      const Ftot = ethers.parseEther("10");
+
+      await proxy.harnessRecordPnl(batchId, Lt, Ftot, ethers.parseEther("500"));
+      await proxy.processDailyBatch(batchId);
+
+      const [, , ft, gt, npre] = await proxy.getDailyPnl(batchId);
+
+      // Grant should be 0 since we're above floor
+      expect(gt).to.equal(0n, "Grant should be 0 when above floor");
+
+      // Verify invariant still holds
+      const lhs = npre - N_prev;
+      const rhs = Lt + ft + gt;
+      expect(lhs).to.equal(rhs, "Pre-batch NAV equation violated");
     });
   });
 
@@ -541,6 +602,65 @@ describe("BatchAccounting Spec Tests", () => {
 
       // Trying to process again fails (no duplicate update)
       await expect(proxy.processDailyBatch(batchId)).to.be.reverted;
+    });
+  });
+
+  // ================================================================
+  // SPEC-7: Edge cases and boundary conditions
+  // ================================================================
+  describe("SPEC-7: Edge cases", () => {
+    it("reverts processDailyBatch for future batch", async () => {
+      const { proxy, module, currentBatchId } = await loadFixture(
+        deploySeededVaultFixture
+      );
+
+      const futureBatchId = currentBatchId + 100n;
+      await proxy.harnessRecordPnl(futureBatchId, 0n, 0n, ethers.parseEther("500"));
+      
+      await expect(
+        proxy.processDailyBatch(futureBatchId)
+      ).to.be.revertedWithCustomError(module, "BatchNotReady");
+    });
+
+    it("handles zero L_t, F_t, G_t correctly", async () => {
+      const { proxy, currentBatchId } = await loadFixture(
+        deploySeededVaultFixture
+      );
+
+      const navBefore = await proxy.getVaultNav();
+      const batchId = currentBatchId + 1n;
+
+      await proxy.harnessRecordPnl(batchId, 0n, 0n, ethers.parseEther("500"));
+      await proxy.processDailyBatch(batchId);
+
+      const navAfter = await proxy.getVaultNav();
+      
+      // NAV should remain unchanged when all components are zero
+      expect(navAfter).to.equal(navBefore);
+    });
+
+    it("handles large negative Lt without underflow", async () => {
+      const { proxy, currentBatchId } = await loadFixture(
+        deploySeededVaultFixture
+      );
+
+      // Set high backstop for grant capability
+      await proxy.setCapitalStack(ethers.parseEther("10000"), 0n);
+
+      const batchId = currentBatchId + 1n;
+      const navBefore = await proxy.getVaultNav();
+
+      // Very large negative Lt (but within NAV bounds due to pdd)
+      const Lt = ethers.parseEther("-500"); // -50% of seeded NAV
+      await proxy.harnessRecordPnl(batchId, Lt, 0n, ethers.parseEther("1000"));
+      await proxy.processDailyBatch(batchId);
+
+      const navAfter = await proxy.getVaultNav();
+      
+      // NAV should be reduced but not below floor (pdd = -30%)
+      // Floor = navBefore * (1 - 0.3) = navBefore * 0.7
+      const floor = (navBefore * 70n) / 100n;
+      expect(navAfter).to.be.gte(floor);
     });
   });
 });

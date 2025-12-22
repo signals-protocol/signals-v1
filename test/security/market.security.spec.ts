@@ -118,6 +118,37 @@ describe("Market Security", () => {
   }
 
   describe("numBins Hard Cap", () => {
+    it("rejects market creation with numBins = 0", async () => {
+      const { core, owner, feePolicy, lifecycleModule } = await loadFixture(
+        deployMarketFixture
+      );
+
+      const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+
+      // Try to create market with 0 bins
+      const numBins = 0;
+      const minTick = 0;
+      const maxTick = 10;
+      const tickSpacing = 1;
+
+      const factors: bigint[] = []; // Empty for 0 bins
+
+      await expect(
+        core.connect(owner).createMarket(
+          minTick,
+          maxTick,
+          tickSpacing,
+          now - 100,
+          now + 10000,
+          now + 10100,
+          numBins,
+          WAD,
+          feePolicy.target,
+          factors
+        )
+      ).to.be.revertedWithCustomError(lifecycleModule, "BinCountExceedsLimit");
+    });
+
     it("rejects market creation with numBins > 256", async () => {
       const { core, owner, feePolicy, lifecycleModule } = await loadFixture(
         deployMarketFixture
@@ -207,6 +238,35 @@ describe("Market Security", () => {
       ).to.not.be.reverted;
     });
 
+    it("allows market creation with numBins = 2 (minimum valid)", async () => {
+      const { core, owner, feePolicy } = await loadFixture(deployMarketFixture);
+
+      const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+
+      // Create market with 2 bins (minimum valid per RiskMath: numBins > 1)
+      const numBins = 2;
+      const minTick = 0;
+      const maxTick = numBins;
+      const tickSpacing = 1;
+
+      const factors = Array(numBins).fill(WAD);
+
+      await expect(
+        core.connect(owner).createMarket(
+          minTick,
+          maxTick,
+          tickSpacing,
+          now - 100,
+          now + 10000,
+          now + 10100,
+          numBins,
+          WAD,
+          feePolicy.target,
+          factors
+        )
+      ).to.not.be.reverted;
+    });
+
     it("rejects market with large numBins that would DoS settlement", async () => {
       const { core, owner, feePolicy, lifecycleModule } = await loadFixture(
         deployMarketFixture
@@ -240,6 +300,34 @@ describe("Market Security", () => {
   });
 
   describe("createMarketUniform also enforces cap", () => {
+    it("rejects uniform market with numBins = 0", async () => {
+      const { core, owner, feePolicy, lifecycleModule } = await loadFixture(
+        deployMarketFixture
+      );
+
+      const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+
+      // Try to create uniform market with 0 bins
+      const numBins = 0;
+      const minTick = 0;
+      const maxTick = 10;
+      const tickSpacing = 1;
+
+      await expect(
+        core.connect(owner).createMarketUniform(
+          minTick,
+          maxTick,
+          tickSpacing,
+          now - 100,
+          now + 10000,
+          now + 10100,
+          numBins,
+          WAD,
+          feePolicy.target
+        )
+      ).to.be.revertedWithCustomError(lifecycleModule, "BinCountExceedsLimit");
+    });
+
     it("rejects uniform market with numBins > 256", async () => {
       const { core, owner, feePolicy, lifecycleModule } = await loadFixture(
         deployMarketFixture
