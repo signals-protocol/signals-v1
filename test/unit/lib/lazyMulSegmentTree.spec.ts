@@ -348,4 +348,223 @@ describe("LazyMulSegmentTree", () => {
       expect(await test.getTotalSum()).to.equal(ethers.parseEther("21"));
     });
   });
+
+  // ============================================================
+  // Edge Cases: Cancellation (combinedPending == ONE_WAD)
+  // ============================================================
+  describe("Edge cases: cancellation (f then 1/f)", () => {
+    it("cancellation case: f=2 then f=0.5 on same range preserves subrange query", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // 8 bins for better coverage of internal nodes
+      await test.initAndSeed(Array(8).fill(WAD));
+
+      const totalBefore = await test.getTotalSum();
+      const subrangeBefore = await test.getRangeSum(0, 3);
+
+      // Apply f=2 to partial range [0,3]
+      await test.applyRangeFactor(0, 3, TWO_WAD);
+
+      // Apply inverse f=0.5 to same range -> combinedPending should become ONE_WAD
+      await test.applyRangeFactor(0, 3, HALF_WAD);
+
+      // Total and subrange should return to original (within rounding tolerance)
+      const totalAfter = await test.getTotalSum();
+      const subrangeAfter = await test.getRangeSum(0, 3);
+
+      approx(totalAfter, totalBefore, 10n);
+      approx(subrangeAfter, subrangeBefore, 10n);
+    });
+
+    it("cancellation case: nested ranges with inverse factors", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.initAndSeed(Array(16).fill(WAD));
+
+      // Apply f=4 to [0,7]
+      await test.applyRangeFactor(0, 7, ethers.parseEther("4"));
+
+      // Apply f=0.25 to [0,7] -> cancellation
+      await test.applyRangeFactor(0, 7, ethers.parseEther("0.25"));
+
+      // Subrange query should match original
+      const subrangeSum = await test.getRangeSum(2, 5);
+      // Original: 4 bins * 1 WAD = 4 WAD
+      approx(subrangeSum, ethers.parseEther("4"), 10n);
+    });
+
+    it("cancellation case: overlapping ranges with partial inverse", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.initAndSeed(Array(8).fill(WAD));
+
+      // Apply f=10 to [0,3]
+      await test.applyRangeFactor(0, 3, ethers.parseEther("10"));
+
+      // Apply f=0.1 to [2,5] -> partial cancellation on [2,3]
+      await test.applyRangeFactor(2, 5, ethers.parseEther("0.1"));
+
+      // Elements 0,1: 1 * 10 = 10
+      // Elements 2,3: 1 * 10 * 0.1 = 1
+      // Elements 4,5: 1 * 0.1 = 0.1
+      // Elements 6,7: 1
+      // Total: 20 + 2 + 0.2 + 2 = 24.2
+      const total = await test.getTotalSum();
+      approx(total, ethers.parseEther("24.2"), 100n);
+
+      // Subrange [2,3] should be back to ~2 WAD
+      const subrange23 = await test.getRangeSum(2, 3);
+      approx(subrange23, ethers.parseEther("2"), 10n);
+    });
+  });
+
+  // ============================================================
+  // Edge Cases: Flush Threshold Stress
+  // ============================================================
+  describe("Edge cases: flush threshold stress", () => {
+    it("repeated MAX_FACTOR triggers flush without overflow", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.initAndSeed(Array(4).fill(WAD));
+
+      // Apply MAX_FACTOR (100) multiple times to trigger flush
+      // pending will grow: 100 -> 10000 -> flush -> 100 -> ...
+      for (let i = 0; i < 5; i++) {
+        await test.applyRangeFactor(0, 3, MAX_FACTOR);
+      }
+
+      // Should not revert, and total should be 4 * 100^5 = 4e10 WAD
+      const total = await test.getTotalSum();
+      // 4 bins * 1 WAD each * 100^5 factor = 4e10 * 1e18 = 4e28
+      // expected = 4 * 100^5 = 4 * 10^10 WAD
+      const expected = ethers.parseEther("40000000000"); // 4e10 WAD
+      approx(total, expected, expected / 100n); // 1% tolerance
+    });
+
+    it("repeated MIN_FACTOR triggers flush without underflow", async () => {
+      const { test } = await loadFixture(deployFixture);
+      // Start with larger values to avoid zero
+      await test.initAndSeed(Array(4).fill(ethers.parseEther("1000000")));
+
+      // Apply MIN_FACTOR (0.01) multiple times to trigger flush
+      // pending will shrink: 0.01 -> 0.0001 -> flush -> 0.01 -> ...
+      for (let i = 0; i < 5; i++) {
+        await test.applyRangeFactor(0, 3, MIN_FACTOR);
+      }
+
+      // Should not revert
+      const total = await test.getTotalSum();
+      // 4 * 1e6 * 0.01^5 = 4e6 * 1e-10 = 4e-4 = 0.0004 WAD per bin
+      const expected =
+        (ethers.parseEther("4000000") * MIN_FACTOR ** 5n) / WAD ** 5n;
+      approx(total, expected, expected / 10n + 1n); // Allow larger tolerance for small values
+    });
+
+    it("alternating MAX and MIN factors", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.initAndSeed(Array(4).fill(WAD));
+
+      // Alternating: should roughly cancel out
+      for (let i = 0; i < 3; i++) {
+        await test.applyRangeFactor(0, 3, MAX_FACTOR); // *100
+        await test.applyRangeFactor(0, 3, MIN_FACTOR); // *0.01
+      }
+
+      // Net effect: (100 * 0.01)^3 = 1^3 = 1
+      const total = await test.getTotalSum();
+      approx(total, ethers.parseEther("4"), 100n);
+    });
+  });
+
+  // ============================================================
+  // Edge Cases: View vs State-Changing Query Consistency
+  // ============================================================
+  describe("Edge cases: view vs state-changing query consistency", () => {
+    it("getRangeSum (view) matches propagateLazy (state-changing)", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.initAndSeed(Array(8).fill(WAD));
+
+      // Apply some factors
+      await test.applyRangeFactor(0, 3, TWO_WAD);
+      await test.applyRangeFactor(2, 5, ethers.parseEther("3"));
+
+      // View query
+      const viewSum = await test.getRangeSum(1, 4);
+
+      // State-changing query (propagateLazy) - call staticCall to get return value
+      const propagatedSum = await test.propagateLazy.staticCall(1, 4);
+
+      expect(viewSum).to.equal(propagatedSum);
+    });
+
+    it("view query unchanged after propagateLazy", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.initAndSeed(Array(8).fill(WAD));
+
+      await test.applyRangeFactor(0, 7, TWO_WAD);
+
+      const viewBefore = await test.getRangeSum(2, 5);
+      await test.propagateLazy(2, 5);
+      const viewAfter = await test.getRangeSum(2, 5);
+
+      expect(viewAfter).to.equal(viewBefore);
+    });
+
+    it("multiple propagateLazy calls are idempotent", async () => {
+      const { test } = await loadFixture(deployFixture);
+      await test.initAndSeed(Array(8).fill(WAD));
+
+      await test.applyRangeFactor(0, 7, ethers.parseEther("5"));
+
+      // Use staticCall to get return values
+      const first = await test.propagateLazy.staticCall(0, 7);
+      await test.propagateLazy(0, 7); // Actually execute to change state
+      const second = await test.propagateLazy.staticCall(0, 7);
+      await test.propagateLazy(0, 7);
+      const third = await test.propagateLazy.staticCall(0, 7);
+
+      expect(first).to.equal(second);
+      expect(second).to.equal(third);
+    });
+  });
+
+  // ============================================================
+  // Property: Naive Model Comparison
+  // ============================================================
+  describe("Property: naive model comparison", () => {
+    it("segment tree matches naive array model after random operations", async () => {
+      const { test } = await loadFixture(deployFixture);
+      const size = 16;
+      await test.initAndSeed(Array(size).fill(WAD));
+
+      // Naive model: array of values
+      const naive: bigint[] = Array(size).fill(WAD);
+
+      const prng = createPrng(777n);
+
+      // Apply 20 random range operations
+      for (let op = 0; op < 20; op++) {
+        const lo = prng.nextInt(size);
+        const hi = lo + prng.nextInt(size - lo);
+        const factor = prng.nextInRange(MIN_FACTOR, MAX_FACTOR);
+
+        // Apply to segment tree
+        await test.applyRangeFactor(lo, hi, factor);
+
+        // Apply to naive model
+        for (let i = lo; i <= hi; i++) {
+          naive[i] = (naive[i] * factor + WAD / 2n) / WAD; // wMulNearest
+        }
+      }
+
+      // Compare individual node values
+      for (let i = 0; i < size; i++) {
+        const treeVal = await test.getNodeValue(i);
+        // Allow 0.01% tolerance due to accumulated rounding differences
+        const tolerance = naive[i] / 10000n + 10n;
+        approx(treeVal, naive[i], tolerance);
+      }
+
+      // Compare total sum
+      const naiveTotal = naive.reduce((a, b) => a + b, 0n);
+      const treeTotal = await test.getTotalSum();
+      approx(treeTotal, naiveTotal, naiveTotal / 1000n + 100n);
+    });
+  });
 });

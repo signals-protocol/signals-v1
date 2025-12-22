@@ -38,7 +38,7 @@ contract SignalsCoreHarness is SignalsCore {
     function harnessGetTreeSum(uint256 marketId) external view returns (uint256) {
         LazyMulSegmentTree.Tree storage tree = marketTrees[marketId];
         if (tree.size == 0) return 0;
-        return tree.getRangeSum(0, tree.size - 1);
+        return tree.totalSum();
     }
 
     function harnessGetMarket(uint256 marketId) external view returns (ISignalsCore.Market memory) {

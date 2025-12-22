@@ -464,8 +464,8 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         uint256 alpha = market.liquidityParameter;
         uint256 zStart = market.initialRootSum;
         
-        // Get current root sum (Z_end)
-        uint256 zEnd = tree.getRangeSum(0, market.numBins - 1);
+        // Get current root sum (Z_end) via totalSum() for O(1) access
+        uint256 zEnd = tree.totalSum();
         
         // P&L = α * (ln(Z_end) - ln(Z_start))
         // L_t = C(q_end) - C(q_start), where C(q) = α * ln(Z(q))
@@ -506,8 +506,8 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         uint256 alpha = market.liquidityParameter;
         uint256 zStart = market.initialRootSum;
         
-        // Get current root sum (Z_end)
-        uint256 zEnd = tree.getRangeSum(0, market.numBins - 1);
+        // Get current root sum (Z_end) via totalSum() for O(1) access
+        uint256 zEnd = tree.totalSum();
         
         // ΔC_t = α * (ln(Z_end) - ln(Z_start)) = C(q_end) - C(q_start)
         int256 deltaC;

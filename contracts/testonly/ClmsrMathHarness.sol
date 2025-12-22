@@ -17,10 +17,8 @@ contract ClmsrMathHarness {
     /// @notice Seed the tree with explicit bin factors.
     function seed(uint256[] memory factors) external {
         if (factors.length == 0) revert SE.EmptyFactors();
-        // reset just in case the harness is re-used
-        tree.size = 0;
-        tree.root = 0;
-        tree.nextIndex = 0;
+        // Reset entire tree struct for re-use (dense version)
+        delete tree;
         tree.init(uint32(factors.length));
         tree.seedWithFactors(factors);
     }

@@ -17,10 +17,8 @@ contract LazyMulSegmentTreeTest {
     uint256 public constant MAX_FACTOR = LazyMulSegmentTree.MAX_FACTOR;
 
     function init(uint32 size) external {
-        // Reset tree state for re-initialization
-        tree.size = 0;
-        tree.root = 0;
-        tree.nextIndex = 0;
+        // Reset entire tree struct for re-initialization (dense version)
+        delete tree;
         tree.init(size);
     }
 
@@ -38,7 +36,7 @@ contract LazyMulSegmentTreeTest {
 
     function getTotalSum() external view returns (uint256) {
         if (tree.size == 0) return 0;
-        return tree.getRangeSum(0, tree.size - 1);
+        return tree.totalSum();
     }
 
     function getNodeValue(uint32 index) external view returns (uint256) {
@@ -53,11 +51,15 @@ contract LazyMulSegmentTreeTest {
     /// @notice Initialize and seed in one call.
     function initAndSeed(uint256[] calldata factors) external {
         if (factors.length == 0) revert SE.EmptyFactors();
-        tree.size = 0;
-        tree.root = 0;
-        tree.nextIndex = 0;
+        // Reset entire tree struct (dense version)
+        delete tree;
         tree.init(uint32(factors.length));
         tree.seedWithFactors(factors);
+    }
+
+    /// @notice Propagate lazy values and return range sum (state-changing).
+    function propagateLazy(uint32 lo, uint32 hi) external returns (uint256) {
+        return tree.propagateLazy(lo, hi);
     }
 }
 
