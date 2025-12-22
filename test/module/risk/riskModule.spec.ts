@@ -220,7 +220,11 @@ describe("RiskModule", () => {
       const Et = ethers.parseEther("10000");
       const numBins = 2n;
 
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
 
       // ln(2) ≈ 0.693 WAD
       // αbase = 0.3 * 10000 / 0.693 ≈ 4329
@@ -232,7 +236,11 @@ describe("RiskModule", () => {
       const Et = ethers.parseEther("10000");
       const numBins = 256n;
 
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
 
       // ln(256) ≈ 5.545 WAD
       // αbase = 0.3 * 10000 / 5.545 ≈ 541
@@ -244,7 +252,11 @@ describe("RiskModule", () => {
       const Et = 0n;
       const numBins = 100n;
 
-      const alphaBase = await riskModule.calculateAlphaBase(Et, numBins, LAMBDA);
+      const alphaBase = await riskModule.calculateAlphaBase(
+        Et,
+        numBins,
+        LAMBDA
+      );
       expect(alphaBase).to.equal(0n);
     });
   });

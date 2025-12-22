@@ -204,11 +204,13 @@ yarn hardhat test test/unit/lib/fixedPointMath.spec.ts
 ## Layer Integrity
 
 ### Principles
+
 1. **Isolation**: Lower layers should not depend on higher layers
 2. **Independence**: Tests at same layer should not depend on each other
 3. **Completeness**: Each layer tests its specific scope without overlap
 
 ### Verification Checklist
+
 - ✅ unit/ tests do not import from module/ or integration/
 - ✅ module/ tests use proxy wrappers for delegatecall simulation
 - ✅ integration/ tests use full system deployment
