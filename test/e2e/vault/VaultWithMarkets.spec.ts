@@ -56,9 +56,9 @@ describe("VaultWithMarkets E2E", () => {
       })
     ).deploy()) as MarketLifecycleModule;
 
-    // Use OracleModuleTest to allow Hardhat local signers for Redstone verification
+    // Use OracleModuleHarness to allow Hardhat local signers for Redstone verification
     const oracle = (await (
-      await ethers.getContractFactory("OracleModuleTest")
+      await ethers.getContractFactory("OracleModuleHarness")
     ).deploy()) as OracleModule;
     const vault = (await (
       await ethers.getContractFactory("LPVaultModule")

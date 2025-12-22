@@ -34,9 +34,9 @@ describe("OracleModule", () => {
         libraries: { LazyMulSegmentTree: lazyLib.target },
       })
     ).deploy()) as MarketLifecycleModule;
-    // Use OracleModuleTest to allow Hardhat local signers for Redstone verification
+    // Use OracleModuleHarness to allow Hardhat local signers for Redstone verification
     const oracleModule = (await (
-      await ethers.getContractFactory("OracleModuleTest")
+      await ethers.getContractFactory("OracleModuleHarness")
     ).deploy()) as OracleModule;
     const riskModule = await (
       await ethers.getContractFactory("RiskModule")

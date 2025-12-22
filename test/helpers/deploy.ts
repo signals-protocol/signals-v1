@@ -233,25 +233,25 @@ export async function deployLargeBinSystem(
 // ============================================================
 
 /**
- * Deploy FixedPointMathTest harness
+ * Deploy FixedPointMathHarness harness
  */
-export async function deployFixedPointMathTest() {
-  const Factory = await ethers.getContractFactory("FixedPointMathTest");
+export async function deployFixedPointMathHarness() {
+  const Factory = await ethers.getContractFactory("FixedPointMathHarness");
   const test = await Factory.deploy();
   await test.waitForDeployment();
   return test;
 }
 
 /**
- * Deploy LazyMulSegmentTreeTest harness with library linking
+ * Deploy LazyMulSegmentTreeHarness harness with library linking
  */
-export async function deployLazyMulSegmentTreeTest() {
-  // LazyMulSegmentTreeTest uses LazyMulSegmentTree library
+export async function deployLazyMulSegmentTreeHarness() {
+  // LazyMulSegmentTreeHarness uses LazyMulSegmentTree library
   const lazyLib = await (
     await ethers.getContractFactory("LazyMulSegmentTree")
   ).deploy();
 
-  const Factory = await ethers.getContractFactory("LazyMulSegmentTreeTest", {
+  const Factory = await ethers.getContractFactory("LazyMulSegmentTreeHarness", {
     libraries: {
       LazyMulSegmentTree: lazyLib.target,
     },

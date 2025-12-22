@@ -7,7 +7,7 @@ import {SignalsErrors as SE} from "../errors/SignalsErrors.sol";
 
 /// @notice Test harness for LazyMulSegmentTree library.
 /// @dev Exposes all tree operations for unit testing.
-contract LazyMulSegmentTreeTest {
+contract LazyMulSegmentTreeHarness {
     using LazyMulSegmentTree for LazyMulSegmentTree.Tree;
 
     LazyMulSegmentTree.Tree private tree;

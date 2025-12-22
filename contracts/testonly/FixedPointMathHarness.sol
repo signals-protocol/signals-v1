@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {FixedPointMathU} from "../lib/FixedPointMathU.sol";
 
 /// @notice Test harness for FixedPointMathU library functions.
-contract FixedPointMathTest {
+contract FixedPointMathHarness {
     uint256 public constant WAD = 1e18;
 
     // Core math wrappers

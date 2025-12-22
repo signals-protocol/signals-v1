@@ -91,9 +91,9 @@ describe("RiskModule", () => {
     const lpVaultImpl = await (
       await ethers.getContractFactory("LPVaultModule")
     ).deploy();
-    // Use OracleModuleTest to allow Hardhat local signers for Redstone verification
+    // Use OracleModuleHarness to allow Hardhat local signers for Redstone verification
     const oracleImpl = await (
-      await ethers.getContractFactory("OracleModuleTest")
+      await ethers.getContractFactory("OracleModuleHarness")
     ).deploy();
 
     // setModules order: (tradeModule, lifecycleModule, riskModule, vaultModule, oracleModule)

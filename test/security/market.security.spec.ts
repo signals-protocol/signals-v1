@@ -43,7 +43,7 @@ describe("Market Security", () => {
     ).deploy();
 
     const oracleModule = await (
-      await ethers.getContractFactory("OracleModuleTest")
+      await ethers.getContractFactory("OracleModuleHarness")
     ).deploy();
     const tradeModule = await (
       await ethers.getContractFactory("TradeModule", {

@@ -4,10 +4,10 @@ pragma solidity ^0.8.28;
 import "../vault/lib/VaultAccountingLib.sol";
 
 /**
- * @title VaultAccountingLibTest
+ * @title VaultAccountingLibHarness
  * @notice Test harness to expose VaultAccountingLib functions
  */
-contract VaultAccountingLibTest {
+contract VaultAccountingLibHarness {
     using VaultAccountingLib for *;
 
     function computePreBatch(

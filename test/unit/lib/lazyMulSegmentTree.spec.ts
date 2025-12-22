@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import { deployLazyMulSegmentTreeTest } from "../../helpers/deploy";
+import { deployLazyMulSegmentTreeHarness } from "../../helpers/deploy";
 import {
   WAD,
   TWO_WAD,
@@ -13,18 +13,18 @@ import { approx, createPrng, randomFactors } from "../../helpers/utils";
 
 describe("LazyMulSegmentTree", () => {
   async function deployFixture() {
-    const test = await deployLazyMulSegmentTreeTest();
+    const test = await deployLazyMulSegmentTreeHarness();
     return { test };
   }
 
   async function deployMediumTreeFixture() {
-    const test = await deployLazyMulSegmentTreeTest();
+    const test = await deployLazyMulSegmentTreeHarness();
     await test.init(100);
     return { test };
   }
 
   async function deploySeededTreeFixture() {
-    const test = await deployLazyMulSegmentTreeTest();
+    const test = await deployLazyMulSegmentTreeHarness();
     // Seed with uniform distribution [1, 1, 1, 1]
     await test.initAndSeed([WAD, WAD, WAD, WAD]);
     return { test };

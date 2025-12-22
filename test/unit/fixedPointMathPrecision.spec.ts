@@ -16,7 +16,7 @@ import { WAD } from "../helpers/constants";
 describe("FixedPointMath Precision", () => {
   async function deployMathFixture() {
     const mathTest = await (
-      await ethers.getContractFactory("FixedPointMathTest")
+      await ethers.getContractFactory("FixedPointMathHarness")
     ).deploy();
     return { mathTest };
   }

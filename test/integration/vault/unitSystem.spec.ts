@@ -40,7 +40,7 @@ describe("UnitSystem Spec Tests", () => {
   }
 
   async function deployFixedPointHarness() {
-    const Factory = await ethers.getContractFactory("FixedPointMathTest");
+    const Factory = await ethers.getContractFactory("FixedPointMathHarness");
     const harness = await Factory.deploy();
     return { harness };
   }

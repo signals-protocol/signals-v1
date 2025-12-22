@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import { deployFixedPointMathTest } from "../../helpers/deploy";
+import { deployFixedPointMathHarness } from "../../helpers/deploy";
 import {
   WAD,
   HALF_WAD,
@@ -12,7 +12,7 @@ import { approx, createPrng } from "../../helpers/utils";
 
 describe("FixedPointMathU", () => {
   async function deployFixture() {
-    const test = await deployFixedPointMathTest();
+    const test = await deployFixedPointMathHarness();
     return { test };
   }
 

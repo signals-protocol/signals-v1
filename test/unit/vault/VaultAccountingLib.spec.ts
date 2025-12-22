@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { VaultAccountingLibTest } from "../../../typechain-types";
+import { VaultAccountingLibHarness } from "../../../typechain-types";
 import { WAD } from "../../helpers/constants";
 
 /**
@@ -20,10 +20,10 @@ import { WAD } from "../../helpers/constants";
  */
 
 describe("VaultAccountingLib", () => {
-  let lib: VaultAccountingLibTest;
+  let lib: VaultAccountingLibHarness;
 
   before(async () => {
-    const factory = await ethers.getContractFactory("VaultAccountingLibTest");
+    const factory = await ethers.getContractFactory("VaultAccountingLibHarness");
     lib = await factory.deploy();
     await lib.waitForDeployment();
   });

@@ -56,9 +56,9 @@ describe("Escrow Security", () => {
       await ethers.getContractFactory("LazyMulSegmentTree")
     ).deploy();
 
-    // Deploy OracleModuleTest for Redstone testing
+    // Deploy OracleModuleHarness for Redstone testing
     const oracleModule = await (
-      await ethers.getContractFactory("OracleModuleTest")
+      await ethers.getContractFactory("OracleModuleHarness")
     ).deploy();
     const tradeModule = await (
       await ethers.getContractFactory("TradeModule", {

@@ -40,8 +40,8 @@ export {
 
 // Deployment helpers
 export {
-  deployFixedPointMathTest,
-  deployLazyMulSegmentTreeTest,
+  deployFixedPointMathHarness,
+  deployLazyMulSegmentTreeHarness,
   deployClmsrMathHarness,
   deployTradeModuleTestEnv,
 } from "./deploy";

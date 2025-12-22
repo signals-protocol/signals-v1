@@ -30,7 +30,7 @@ describe("Batch Processing Security", () => {
 
     const lazyLib = await (await ethers.getContractFactory("LazyMulSegmentTree")).deploy();
 
-    const oracleModule = await (await ethers.getContractFactory("OracleModuleTest")).deploy();
+    const oracleModule = await (await ethers.getContractFactory("OracleModuleHarness")).deploy();
     const tradeModule = await (await ethers.getContractFactory("TradeModule", {
       libraries: { LazyMulSegmentTree: lazyLib.target }
     })).deploy();
