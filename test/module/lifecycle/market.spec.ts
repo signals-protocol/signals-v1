@@ -164,19 +164,22 @@ describe("MarketLifecycleModule", () => {
       ethers.parseEther("1"),
       ethers.ZeroAddress
     );
-    await expect(
-      core.createMarketUniform(
-        0,
-        4,
-        1,
-        Number(start),
-        Number(end),
-        Number(settlementTs),
-        4,
-        ethers.parseEther("1"),
-        ethers.ZeroAddress
-      )
-    ).to.emit(lifecycleEvents, "MarketCreated");
+    const tx = await core.createMarketUniform(
+      0,
+      4,
+      1,
+      Number(start),
+      Number(end),
+      Number(settlementTs),
+      4,
+      ethers.parseEther("1"),
+      ethers.ZeroAddress
+    );
+    await expect(tx).to.emit(lifecycleEvents, "MarketCreated");
+    const expectedFactors = [WAD, WAD, WAD, WAD];
+    await expect(tx)
+      .to.emit(lifecycleEvents, "MarketFactorsSeeded")
+      .withArgs(marketId, expectedFactors);
 
     const market = await core.markets(marketId);
     expect(market.isActive).to.equal(true);

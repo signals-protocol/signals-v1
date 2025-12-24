@@ -18,7 +18,17 @@ contract MarketLifecycleModule is SignalsCoreStorage {
     uint256 internal constant WAD = 1e18;
 
     event SettlementChunkRequested(uint256 indexed marketId, uint32 indexed chunkIndex);
-    event MarketCreated(uint256 indexed marketId);
+    event MarketCreated(
+        uint256 indexed marketId,
+        uint64 startTimestamp,
+        uint64 endTimestamp,
+        int256 minTick,
+        int256 maxTick,
+        int256 tickSpacing,
+        uint32 numBins,
+        uint256 liquidityParameter
+    );
+    event MarketFactorsSeeded(uint256 indexed marketId, uint256[] baseFactors);
     event MarketSettled(
         uint256 indexed marketId,
         int256 settlementValue,
@@ -47,6 +57,8 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         uint64 endTimestamp,
         uint64 settlementTimestamp
     );
+    event SettlementTimestampUpdated(uint256 indexed marketId, uint64 settlementTimestamp);
+    event MarketFeePolicySet(uint256 indexed marketId, address indexed oldPolicy, address indexed newPolicy);
 
     // Diff array pointQuery is O(n), so limit bins to prevent settlement DoS
     uint32 private constant MAX_BIN_COUNT = 256;
@@ -134,7 +146,21 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         // Store initial root sum for P&L calculation
         market.initialRootSum = rootSum;
 
-        emit MarketCreated(marketId);
+        emit MarketCreated(
+            marketId,
+            startTimestamp,
+            endTimestamp,
+            minTick,
+            maxTick,
+            tickSpacing,
+            numBins,
+            liquidityParameter
+        );
+        emit MarketFactorsSeeded(marketId, baseFactors);
+        if (feePolicy != address(0)) {
+            emit MarketFeePolicySet(marketId, address(0), feePolicy);
+        }
+        emit SettlementTimestampUpdated(marketId, settlementTimestamp);
     }
 
     // ============================================================
@@ -333,6 +359,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         market.settlementTimestamp = settlementTimestamp;
 
         emit MarketTimingUpdated(marketId, startTimestamp, endTimestamp, settlementTimestamp);
+        emit SettlementTimestampUpdated(marketId, settlementTimestamp);
     }
 
     function requestSettlementChunks(uint256 marketId, uint32 maxChunksPerTx) external onlyDelegated returns (uint32 emitted) {
