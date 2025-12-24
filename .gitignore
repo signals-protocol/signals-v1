@@ -103,6 +103,7 @@ lib-cov
 web_modules/
 .DS_Store
 signals-v0/
+state/
 
 # Typechain
 typechain-types
