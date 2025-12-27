@@ -22,9 +22,18 @@ jobs:
         with:
           node-version: 20
           cache: yarn
+          cache-dependency-path: yarn.lock
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Cache Hardhat artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache
+            artifacts
+          key: hardhat-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts', 'hardhat.config.js', 'contracts/**') }}
 
       - name: Compile contracts
         run: yarn hardhat compile
@@ -44,9 +53,18 @@ jobs:
         with:
           node-version: 20
           cache: yarn
+          cache-dependency-path: yarn.lock
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Cache Hardhat artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache
+            artifacts
+          key: hardhat-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts', 'hardhat.config.js', 'contracts/**') }}
 
       - name: Compile contracts
         run: yarn hardhat compile
@@ -65,9 +83,18 @@ jobs:
         with:
           node-version: 20
           cache: yarn
+          cache-dependency-path: yarn.lock
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Cache Hardhat artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache
+            artifacts
+          key: hardhat-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts', 'hardhat.config.js', 'contracts/**') }}
 
       - name: Compile contracts
         run: yarn hardhat compile
