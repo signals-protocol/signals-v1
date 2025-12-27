@@ -85,7 +85,6 @@ contract TradeModule is SignalsCoreStorage {
     // --- External stubs ---
     /// @notice Open a new position (execute-first model for exact cost calculation)
     /// @dev Applies factor first, then computes exact cost from actual sum change
-    /// @dev v0 parity: emits PositionOpened → (fee>0) TradeFeeCharged
     function openPosition(
         uint256 marketId,
         int256 lowerTick,
@@ -124,15 +123,11 @@ contract TradeModule is SignalsCoreStorage {
             market.openPositionCount += 1;
         }
 
-        // v0 parity: PositionOpened first, then TradeFeeCharged (only if fee > 0)
         emit PositionOpened(positionId, msg.sender, marketId, lowerTick, upperTick, quantity, cost6);
-        if (fee6 > 0) {
-            emit TradeFeeCharged(msg.sender, marketId, positionId, true, cost6, fee6, feePolicy);
-        }
+        emit TradeFeeCharged(msg.sender, marketId, positionId, true, cost6, fee6, feePolicy);
     }
 
     /// @notice Increase an existing position (execute-first model for exact cost calculation)
-    /// @dev v0 parity: emits PositionIncreased → (fee>0) TradeFeeCharged
     function increasePosition(
         uint256 positionId,
         uint128 quantity,
@@ -171,31 +166,26 @@ contract TradeModule is SignalsCoreStorage {
         uint128 newQuantity = position.quantity + quantity;
         positionContract.updateQuantity(positionId, newQuantity);
 
-        // v0 parity: PositionIncreased first, then TradeFeeCharged (only if fee > 0)
         emit PositionIncreased(positionId, msg.sender, quantity, newQuantity, cost6);
-        if (fee6 > 0) {
-            emit TradeFeeCharged(msg.sender, position.marketId, positionId, true, cost6, fee6, feePolicy);
-        }
+        emit TradeFeeCharged(msg.sender, position.marketId, positionId, true, cost6, fee6, feePolicy);
     }
 
-    /// @dev v0 parity: emits PositionDecreased → (fee>0) TradeFeeCharged
     function decreasePosition(
         uint256 positionId,
         uint128 quantity,
         uint256 minProceeds
     ) external onlyDelegated {
         ISignalsPosition.Position memory position = positionContract.getPosition(positionId);
-        (uint128 newQuantity, uint256 baseProceeds, uint256 fee6, address feePolicy) = 
-            _decreasePositionInternal(position, positionId, quantity, minProceeds);
-
-        // v0 parity: PositionDecreased first, then TradeFeeCharged (only if fee > 0)
+        (uint128 newQuantity, uint256 baseProceeds, uint256 fee6, address feePolicy) = _decreasePositionInternal(
+            position,
+            positionId,
+            quantity,
+            minProceeds
+        );
         emit PositionDecreased(positionId, msg.sender, quantity, newQuantity, baseProceeds);
-        if (fee6 > 0) {
-            emit TradeFeeCharged(msg.sender, position.marketId, positionId, false, baseProceeds, fee6, feePolicy);
-        }
+        emit TradeFeeCharged(msg.sender, position.marketId, positionId, false, baseProceeds, fee6, feePolicy);
     }
 
-    /// @dev v0 parity: emits PositionClosed → (fee>0) TradeFeeCharged
     function closePosition(
         uint256 positionId,
         uint256 minProceeds
@@ -208,12 +198,8 @@ contract TradeModule is SignalsCoreStorage {
             minProceeds
         );
         require(newQty == 0, SE.CloseInconsistent(0, newQty));
-
-        // v0 parity: PositionClosed first, then TradeFeeCharged (only if fee > 0)
         emit PositionClosed(positionId, msg.sender, baseProceeds);
-        if (fee6 > 0) {
-            emit TradeFeeCharged(msg.sender, position.marketId, positionId, false, baseProceeds, fee6, feePolicy);
-        }
+        emit TradeFeeCharged(msg.sender, position.marketId, positionId, false, baseProceeds, fee6, feePolicy);
     }
 
     /**
@@ -366,11 +352,6 @@ contract TradeModule is SignalsCoreStorage {
     }
 
     /// @notice Internal decrease position logic (execute-first model for exact proceeds calculation)
-    /// @dev Does NOT emit events - caller is responsible for emitting Position and Fee events
-    /// @return newQuantity The new quantity after decrease
-    /// @return baseProceeds The gross proceeds (before fee deduction)
-    /// @return fee6 The fee amount in 6 decimals
-    /// @return feePolicy The fee policy address used
     function _decreasePositionInternal(
         ISignalsPosition.Position memory position,
         uint256 positionId,
@@ -425,7 +406,6 @@ contract TradeModule is SignalsCoreStorage {
         } else {
             positionContract.updateQuantity(positionId, newQuantity);
         }
-        // Note: Caller must emit PositionDecreased/PositionClosed and TradeFeeCharged events
     }
 
     // --- Fee/payment helpers ---
