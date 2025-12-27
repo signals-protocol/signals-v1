@@ -46,5 +46,6 @@ export {
   deployTradeModuleTestEnv,
 } from "./deploy";
 
+export { deployFullSystem } from "./fullSystem";
 
 
