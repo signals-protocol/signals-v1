@@ -49,6 +49,8 @@ interface SignalsErrors {
     error BatchNotProcessed(uint64 batchId);
     error BatchAlreadyHasMarket(uint64 batchId, uint256 existingMarketId);
     error BatchMarketNotSettled(uint64 batchId, uint256 marketId);
+    error BatchHasNoMarkets(uint64 batchId);
+    error BatchMarketsNotResolved(uint64 batchId, uint64 resolvedMarkets, uint64 totalMarkets);
     error BatchNotReady(uint64 batchId);
     error BatchNotEnded(uint64 batchId, uint64 batchEndTime, uint64 currentTime);
     error DailyBatchAlreadyProcessed(uint64 batchId);
@@ -191,4 +193,3 @@ interface SignalsErrors {
     // ============================================================
     error EmptyFactors();
 }
-

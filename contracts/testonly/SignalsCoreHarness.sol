@@ -45,6 +45,11 @@ contract SignalsCoreHarness is SignalsCore {
         return markets[marketId];
     }
 
+    /// @notice Set batch market counts for testing (bypasses lifecycle)
+    function harnessSetBatchMarketState(uint64 batchId, uint64 total, uint64 resolved) external onlyOwner {
+        _batchMarketState[batchId] = BatchMarketState({ total: total, resolved: resolved });
+    }
+
     // ============================================================
     // Exposure Ledger test helpers (Fenwick-based)
     // ============================================================

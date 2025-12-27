@@ -118,6 +118,19 @@ contract LPVaultModuleProxy is SignalsCoreStorage {
         snap.Lt += lt;
         snap.Ftot += ftot;
         snap.DeltaEtSum += deltaEt;
+
+        // Default test harness: assume one resolved market per batch unless overridden
+        if (_batchMarketState[batchId].total == 0) {
+            _batchMarketState[batchId].total = 1;
+        }
+        if (_batchMarketState[batchId].resolved < _batchMarketState[batchId].total) {
+            _batchMarketState[batchId].resolved = _batchMarketState[batchId].total;
+        }
+    }
+
+    /// @notice Harness-only: set batch market counts explicitly for tests
+    function harnessSetBatchMarketState(uint64 batchId, uint64 total, uint64 resolved) external {
+        _batchMarketState[batchId] = BatchMarketState({ total: total, resolved: resolved });
     }
 
     function processDailyBatch(uint64 batchId) external {

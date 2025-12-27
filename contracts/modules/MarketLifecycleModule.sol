@@ -110,15 +110,11 @@ contract MarketLifecycleModule is SignalsCoreStorage {
 
         uint256 deltaEt = _calculateDeltaEt(liquidityParameter, numBins, rootSum, minFactor);
 
-        // One market per batch invariant for simplified ΔEₜ admissibility
-        uint64 batchId = uint64(settlementTimestamp / BATCH_SECONDS);
-        uint256 existingMarket = _batchIdToMarketId[batchId];
-        require(existingMarket == 0, SE.BatchAlreadyHasMarket(batchId, existingMarket));
+        uint64 batchId = _getBatchIdForTimestamp(settlementTimestamp);
 
         marketId = ++nextMarketId;
         
-        // Register market for this batch
-        _batchIdToMarketId[batchId] = marketId;
+        _registerMarketForBatch(batchId);
         ISignalsCore.Market storage market = markets[marketId];
         market.isActive = true;
         market.settled = false;
@@ -223,6 +219,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         _totalPayoutReserve6 += payoutReserve;
         
         _recordPnlToBatch(batchId, lt, ftot, market.deltaEt);
+        _markMarketResolved(marketId, batchId);
         
         emit MarketPnlRecorded(marketId, batchId, lt, ftot);
         emit MarketSettled(marketId, market.settlementValue, settlementTick, market.settlementFinalizedAt);
@@ -265,6 +262,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
 
         market.failed = true;
         market.isActive = false;
+        _markMarketResolved(marketId, _getBatchIdForMarket(marketId));
 
         emit MarketFailed(marketId, nowTs);
     }
@@ -309,6 +307,7 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         _totalPayoutReserve6 += payoutReserve;
         
         _recordPnlToBatch(batchId, lt, ftot, market.deltaEt);
+        _markMarketResolved(marketId, batchId);
 
         emit MarketPnlRecorded(marketId, batchId, lt, ftot);
         emit MarketSettledSecondary(marketId, settlementValue, settlementTick, market.settlementFinalizedAt);
@@ -319,6 +318,15 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         require(_marketExists(marketId), SE.MarketNotFound(marketId));
         // Can reopen either settled or failed markets
         require(market.settled || market.failed, SE.MarketNotSettled(marketId));
+
+        uint64 oldBatchId = market.settlementTimestamp == 0
+            ? 0
+            : _getBatchIdForMarket(marketId);
+
+        if (market.settlementTimestamp != 0) {
+            _deregisterMarketForBatch(oldBatchId);
+            _unmarkMarketResolved(marketId, oldBatchId);
+        }
 
         market.settled = false;
         market.failed = false;
@@ -353,6 +361,26 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         require(_marketExists(marketId), SE.MarketNotFound(marketId));
         require(!market.settled, SE.MarketAlreadySettled(marketId));
         _validateTimeRange(startTimestamp, endTimestamp, settlementTimestamp);
+
+        uint64 oldSettlementTimestamp = market.settlementTimestamp;
+        uint64 newBatchId = _getBatchIdForTimestamp(settlementTimestamp);
+
+        if (oldSettlementTimestamp == 0) {
+            _registerMarketForBatch(newBatchId);
+            if (_marketBatchResolved[marketId]) {
+                _batchMarketState[newBatchId].resolved += 1;
+            }
+        } else {
+            uint64 oldBatchId = _getBatchIdForTimestamp(oldSettlementTimestamp);
+            if (oldBatchId != newBatchId) {
+                _deregisterMarketForBatch(oldBatchId);
+                _registerMarketForBatch(newBatchId);
+                if (_marketBatchResolved[marketId]) {
+                    _batchMarketState[oldBatchId].resolved -= 1;
+                    _batchMarketState[newBatchId].resolved += 1;
+                }
+            }
+        }
 
         market.startTimestamp = startTimestamp;
         market.endTimestamp = endTimestamp;
@@ -466,6 +494,10 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         // Use settlement timestamp divided by day (BATCH_SECONDS)
         // This groups all markets settling on the same day into one batch (day-key)
         return market.settlementTimestamp / BATCH_SECONDS;
+    }
+
+    function _getBatchIdForTimestamp(uint64 settlementTimestamp) internal pure returns (uint64) {
+        return settlementTimestamp / BATCH_SECONDS;
     }
 
     /**
@@ -585,6 +617,26 @@ contract MarketLifecycleModule is SignalsCoreStorage {
         
         // Early check: if total ΔEₜ exceeds backstopNav, batch will fail
         require(snap.DeltaEtSum <= capitalStack.backstopNav, SE.BatchDeltaEtExceedsBackstop(snap.DeltaEtSum, capitalStack.backstopNav));
+    }
+
+    function _registerMarketForBatch(uint64 batchId) internal {
+        _batchMarketState[batchId].total += 1;
+    }
+
+    function _deregisterMarketForBatch(uint64 batchId) internal {
+        _batchMarketState[batchId].total -= 1;
+    }
+
+    function _markMarketResolved(uint256 marketId, uint64 batchId) internal {
+        if (_marketBatchResolved[marketId]) return;
+        _marketBatchResolved[marketId] = true;
+        _batchMarketState[batchId].resolved += 1;
+    }
+
+    function _unmarkMarketResolved(uint256 marketId, uint64 batchId) internal {
+        if (!_marketBatchResolved[marketId]) return;
+        _marketBatchResolved[marketId] = false;
+        _batchMarketState[batchId].resolved -= 1;
     }
 
     // ============================================================

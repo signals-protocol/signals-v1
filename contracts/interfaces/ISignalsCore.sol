@@ -168,6 +168,12 @@ interface ISignalsCore {
         uint64 claimOpen
     );
 
+    /// @notice Get current batch ID
+    function getCurrentBatchId() external view returns (uint64);
+
+    /// @notice Get market counts for a batch (one-to-many)
+    function getBatchMarketState(uint64 batchId) external view returns (uint64 total, uint64 resolved);
+
     /// @notice Mark a market's settlement as failed due to oracle issue
     /// @dev Operations can call during PendingOps window
     function markSettlementFailed(uint256 marketId) external;

@@ -300,11 +300,12 @@ contract LPVaultModule is SignalsCoreStorage {
         DailyPnlSnapshot storage snap = _dailyPnl[batchId];
         if (snap.processed) revert SE.DailyBatchAlreadyProcessed(batchId);
 
-        // CRITICAL-02: Verify batch's market is settled (prevents settlement DoS)
-        // If batch has an associated market, it must be settled before batch processing
-        // Otherwise, _recordPnlToBatch would revert with BatchAlreadyProcessed
-        uint256 marketId = _batchIdToMarketId[batchId];
-        if (marketId != 0 && !markets[marketId].settled) revert SE.BatchMarketNotSettled(batchId, marketId);
+        // Batch can only process once all assigned markets are resolved (settled or failed)
+        BatchMarketState storage marketState = _batchMarketState[batchId];
+        if (marketState.total == 0) revert SE.BatchHasNoMarkets(batchId);
+        if (marketState.resolved != marketState.total) {
+            revert SE.BatchMarketsNotResolved(batchId, marketState.resolved, marketState.total);
+        }
 
         // Step 1: Get pre-aggregated totals (O(1))
         PendingBatchTotal storage pending = _pendingBatchTotals[batchId];

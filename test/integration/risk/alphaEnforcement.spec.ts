@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import {
   SignalsCoreHarness,
-  MockPaymentToken,
+  SignalsUSDToken,
   MockSignalsPosition,
   MarketLifecycleModule,
   RiskModule,
@@ -24,7 +24,7 @@ import {
 
 describe("α Safety Bound Enforcement (Integration)", () => {
   let core: SignalsCoreHarness;
-  let payment: MockPaymentToken;
+  let payment: SignalsUSDToken;
   let position: MockSignalsPosition;
   let lifecycle: MarketLifecycleModule;
   let risk: RiskModule;
@@ -37,7 +37,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
     trader = _trader;
 
     payment = await (
-      await ethers.getContractFactory("MockPaymentToken")
+      await ethers.getContractFactory("SignalsUSDToken")
     ).deploy();
     position = await (
       await ethers.getContractFactory("MockSignalsPosition")
@@ -915,9 +915,9 @@ describe("α Safety Bound Enforcement (Integration)", () => {
   // Prior Admissibility tests are in the earlier "Prior Admissibility (ΔEₜ ≤ backstopNav)" section.
 
   // ==================================================================
-  // One Market Per Batch Invariant
+  // Multiple Markets Per Batch
   // ==================================================================
-  describe("One Market Per Batch Invariant", () => {
+  describe("Multiple Markets Per Batch", () => {
     it("allows first market creation for a batch", async () => {
       const now = await time.latest();
       const WAD = ethers.parseEther("1");
@@ -942,7 +942,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
       ).to.not.be.reverted;
     });
 
-    it("reverts second market creation for same batch", async () => {
+    it("allows second market creation for same batch", async () => {
       const now = await time.latest();
       const WAD = ethers.parseEther("1");
       const uniformFactors = Array(10).fill(WAD);
@@ -966,7 +966,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
         uniformFactors
       );
 
-      // Second market with same batchId (same settlement day) should revert
+      // Second market with same batchId (same settlement day) should succeed
       // Note: start < end < settlement is required
       await expect(
         core.createMarket(
@@ -981,7 +981,7 @@ describe("α Safety Bound Enforcement (Integration)", () => {
           ethers.ZeroAddress,
           uniformFactors
         )
-      ).to.be.revertedWithCustomError(lifecycle, "BatchAlreadyHasMarket");
+      ).to.not.be.reverted;
     });
 
     it("allows markets in different batches (different settlement days)", async () => {

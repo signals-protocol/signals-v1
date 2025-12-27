@@ -603,6 +603,12 @@ contract SignalsCore is
         return currentBatchId;
     }
 
+    /// @notice Get market counts for a batch (one-to-many)
+    function getBatchMarketState(uint64 batchId) external view returns (uint64 total, uint64 resolved) {
+        BatchMarketState storage state = _batchMarketState[batchId];
+        return (state.total, state.resolved);
+    }
+
     /// @notice Get withdrawal lag in batches
     function getWithdrawalLagBatches() external view returns (uint64) {
         return withdrawalLagBatches;

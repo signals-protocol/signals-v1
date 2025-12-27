@@ -334,7 +334,7 @@ describe("VaultWithMarkets E2E", () => {
     it("single market per batch: ΔEₜ is stored and used in grant cap", async () => {
       // E2E verification that market's deltaEt is correctly stored and used
       // in the fee waterfall's grant cap calculation during batch processing.
-      // Note: System enforces ONE market per batch (BatchAlreadyHasMarket invariant).
+    // Note: System allows multiple markets per batch; ΔEₜ sums per batch.
       const { seeder, core, payment } = await loadFixture(deploySystem);
 
       const latest = BigInt(await time.latest());
@@ -387,7 +387,7 @@ describe("VaultWithMarkets E2E", () => {
     });
 
     // Note: 
-    // 1. System enforces ONE market per batch (BatchAlreadyHasMarket invariant).
+    // 1. System allows multiple markets per batch; ΔEₜ sums per batch.
     // 2. GrantExceedsTailBudget revert is covered exhaustively in
     //    test/unit/lib/feeWaterfallLib.spec.ts (INV-FW4 tests).
   });
